@@ -17,6 +17,7 @@ function RegisterForm(){
       name: data.fullName,
       email: data.email,
       password: data.password,
+      gender: data.gender,
     });
 
     saveToken(response.token);
@@ -94,6 +95,24 @@ function RegisterForm(){
                         {errors.confirmPassword?.message}
                     </p>
                 </div>
+                <div className="mb-4">
+                    <label className="block mb-2 font-medium">
+                        Gender
+                    </label>
+
+                    <select
+                    {...register("gender")}
+                    className="w-full border p-3 rounded-lg"
+                    >
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    </select>
+
+                    <p className="text-red-500 text-sm">
+                    {errors.gender?.message}
+                    </p>
+                    </div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition">
                     Register
                 </button>

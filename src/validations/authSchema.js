@@ -29,6 +29,9 @@ export const registerSchema = z
     confirmPassword: z
       .string()
       .min(6, "Confirm Password is required"),
+      gender: z
+      .string()
+      .min(1, "Please select your gender"),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
