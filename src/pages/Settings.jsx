@@ -1,14 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  getProfile,
+  updatePreferences,
+} from "../services/profileService";
 
 function Settings() {
   const [theme, setTheme] = useState("light");
   const [language, setLanguage] = useState("English");
 
-  const handleSave = () => {
-    alert("Settings Saved Successfully");
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
-    // Later:
-    // Call API to save theme and language
+  const loadSettings = async () => {
+    try {
+      const data = await getProfile();
+
+      setTheme(data.user.theme || "light");
+      setLanguage(data.user.preferredLanguage || "English");
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const response = await updatePreferences({
+        theme,
+        preferredLanguage: language,
+      });
+
+      alert(response.message);
+    } catch (error) {
+      console.log(error);
+      alert("Failed to save settings");
+    }
   };
 
   return (
@@ -18,12 +44,10 @@ function Settings() {
         Settings
       </h1>
 
-      {/* Theme Section */}
-
-      <div className="mb-10">
+      <div className="mb-8">
 
         <h2 className="text-xl font-semibold mb-4">
-          Select Theme
+          Theme
         </h2>
 
         <div className="space-y-3">
@@ -62,9 +86,7 @@ function Settings() {
 
       </div>
 
-      {/* Language Section */}
-
-      <div className="mb-10">
+      <div className="mb-8">
 
         <h2 className="text-xl font-semibold mb-4">
           Preferred Language
@@ -73,7 +95,7 @@ function Settings() {
         <select
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
-          className="border rounded p-3 w-full"
+          className="border p-3 rounded w-full"
         >
           <option>English</option>
           <option>Telugu</option>
@@ -82,11 +104,9 @@ function Settings() {
 
       </div>
 
-      {/* Save Button */}
-
       <button
         onClick={handleSave}
-        className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700"
+        className="bg-indigo-600 text-white px-6 py-3 rounded"
       >
         Save Settings
       </button>

@@ -6,6 +6,7 @@ import ProtectedRoute from "../../components/auth/ProtectedRoute";
 import PublicRoute from "../../components/auth/PublicRoute";
 import Profile from "../Profile";
 import Settings from "../Settings";
+import Chat from "../Chat";
 function AppRoutes(){
     return (
         <Routes>
@@ -18,12 +19,21 @@ function AppRoutes(){
                     <Dashboard />
                 </ProtectedRoute>
                 } >
+            
             <Route index element={<Profile />} />
 
             <Route path="profile" element={<Profile />} />
 
             <Route path="settings" element={<Settings />} />
             </Route>
+            <Route
+                path="/chat"
+                element={
+                <ProtectedRoute>
+                <Chat />
+                </ProtectedRoute>
+                }
+            />
         </Routes>
     );
 }

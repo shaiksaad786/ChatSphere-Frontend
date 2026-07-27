@@ -1,12 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getProfile, updateProfile } from "../services/profileService";
 
 function Profile() {
   const [isEditing, setIsEditing] = useState(false);
 
   const [user, setUser] = useState({
-    name: "Shaik Saad",
-    email: "saad@gmail.com",
+    name: "",
+    email: "",
+    profilePic: "",
   });
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const data = await getProfile();
+
+      setUser({
+        name: data.user.name,
+        email: data.user.email,
+        profilePic: data.user.profilePic || "",
+      });
+    } catch (error) {
+      console.log(error);
+      alert("Failed to load profile");
+    }
+  };
 
   const handleChange = (e) => {
     setUser({
@@ -15,13 +36,21 @@ function Profile() {
     });
   };
 
-  const handleSave = () => {
-    alert("Profile Updated Successfully");
+  const handleSave = async () => {
+    try {
+      const response = await updateProfile({
+        name: user.name,
+        profilePic: user.profilePic,
+      });
 
-    // Later:
-    // Call Update Profile API here
+      alert(response.message);
+      setIsEditing(false);
 
-    setIsEditing(false);
+      fetchProfile();
+    } catch (error) {
+      console.log(error);
+      alert("Profile Update Failed");
+    }
   };
 
   return (
@@ -30,47 +59,47 @@ function Profile() {
       <div className="flex flex-col items-center">
 
         <img
-          src="https://i.pravatar.cc/150"
+          src={
+            user.profilePic
+              ? user.profilePic
+              : "https://i.pravatar.cc/150"
+          }
           alt="Profile"
           className="w-36 h-36 rounded-full border-4 border-indigo-600"
         />
 
-        <button className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded">
+        <button
+          className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded"
+        >
           Change Photo
         </button>
 
       </div>
 
-      <div className="mt-10">
+      <div className="mt-8">
 
-        <label className="font-semibold">
-          Name
-        </label>
+        <label>Name</label>
 
         <input
           type="text"
           name="name"
           value={user.name}
-          onChange={handleChange}
           disabled={!isEditing}
-          className="w-full border p-3 rounded mt-2"
+          onChange={handleChange}
+          className="border p-3 w-full rounded mt-2"
         />
 
       </div>
 
       <div className="mt-6">
 
-        <label className="font-semibold">
-          Email
-        </label>
+        <label>Email</label>
 
         <input
           type="email"
-          name="email"
           value={user.email}
-          onChange={handleChange}
-          disabled={!isEditing}
-          className="w-full border p-3 rounded mt-2"
+          disabled
+          className="border p-3 w-full rounded mt-2 bg-gray-100"
         />
 
       </div>
@@ -94,7 +123,10 @@ function Profile() {
             </button>
 
             <button
-              onClick={() => setIsEditing(false)}
+              onClick={() => {
+                setIsEditing(false);
+                fetchProfile();
+              }}
               className="bg-gray-500 text-white px-6 py-2 rounded"
             >
               Cancel
