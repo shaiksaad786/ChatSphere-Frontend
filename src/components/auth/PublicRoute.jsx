@@ -5,7 +5,7 @@ function PublicRoute({ children }) {
   const token = getToken();
 
   if (token) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/chat" replace />;
   }
 
   return children;

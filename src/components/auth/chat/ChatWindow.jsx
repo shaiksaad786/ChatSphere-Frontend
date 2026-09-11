@@ -1,61 +1,295 @@
-import MessageInput from "./MessageInput";
+import { useEffect, useRef, useState } from "react";
 
-const messages = [
-  {
-    id: 1,
-    sender: "me",
-    text: "Hi Ravali!"
-  },
-  {
-    id: 2,
-    sender: "other",
-    text: "Hello Saad!"
-  },
-  {
-    id: 3,
-    sender: "me",
-    text: "How is the backend?"
-  },
-  {
-    id: 4,
-    sender: "other",
-    text: "Completed successfully."
+import BookmarkButton from "./BookmarkButton";
+import SelfDestructSelector from "./SelfDestructSelector";
+
+function ChatWindow({
+  messages,
+  currentUserId,
+}) {
+  const bottomRef = useRef(null);
+
+  const [openMenu, setOpenMenu] =
+    useState(null);
+
+  const [localMessages, setLocalMessages] =
+    useState(messages);
+
+  useEffect(() => {
+    setLocalMessages(messages);
+  }, [messages]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [localMessages]);
+
+  if (!localMessages.length) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-gray-400 bg-[#f7f8fc]">
+        <div className="text-center">
+          <div className="text-5xl mb-3">
+            💬
+          </div>
+
+          <p className="font-medium">
+            No messages yet
+          </p>
+
+          <p className="text-sm mt-1">
+            Say hello 👋
+          </p>
+        </div>
+      </div>
+    );
   }
-];
 
-function ChatWindow() {
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex-1 overflow-y-auto p-5 bg-[#f7f8fc]">
 
-      <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
+      <div className="max-w-4xl mx-auto space-y-4">
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`mb-4 flex ${
-              msg.sender === "me"
-                ? "justify-end"
-                : "justify-start"
-            }`}
-          >
+        {localMessages.map((message) => {
+
+          const mine =
+            String(
+              message.sender?._id ||
+                message.sender
+            ) ===
+            String(currentUserId);
+
+          return (
             <div
-              className={`px-4 py-2 rounded-xl max-w-xs ${
-                msg.sender === "me"
-                  ? "bg-indigo-600 text-white"
-                  : "bg-white"
+              key={message._id}
+              className={`flex ${
+                mine
+                  ? "justify-end"
+                  : "justify-start"
               }`}
             >
-              {msg.text}
+
+              <div className="relative max-w-[75%]">
+
+                {/* Message bubble */}
+                <div
+                  className={`rounded-2xl px-4 py-3 shadow-sm ${
+                    mine
+                      ? "bg-indigo-600 text-white rounded-br-sm"
+                      : "bg-white text-gray-800 rounded-bl-sm"
+                  }`}
+                >
+
+                  <MessageContent
+                    message={message}
+                  />
+
+                  {/* Bottom information */}
+                  <div
+                    className={`mt-2 flex items-center gap-2 text-[10px] ${
+                      mine
+                        ? "text-indigo-100"
+                        : "text-gray-400"
+                    }`}
+                  >
+
+                    <span>
+                      {message.createdAt
+                        ? new Date(
+                            message.createdAt
+                          ).toLocaleTimeString(
+                            [],
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }
+                          )
+                        : ""}
+                    </span>
+
+                    {/* Delivery / read */}
+                    {mine && (
+                      <span>
+                        {message.isRead
+                          ? "✓✓"
+                          : message.isDelivered
+                          ? "✓✓"
+                          : "✓"}
+                      </span>
+                    )}
+
+                    {/* Self destruct */}
+                    {message.isSelfDestruct && (
+                      <span>
+                        💣{" "}
+                        {getExpiryText(
+                          message
+                        )}
+                      </span>
+                    )}
+
+                  </div>
+                </div>
+
+                {/* Menu button */}
+                <button
+                  onClick={() =>
+                    setOpenMenu(
+                      openMenu ===
+                        message._id
+                        ? null
+                        : message._id
+                    )
+                  }
+                  className="absolute -right-9 top-1 w-8 h-8 rounded-full hover:bg-gray-200 text-gray-500"
+                >
+                  ⋮
+                </button>
+
+                {/* Menu */}
+                {openMenu ===
+                  message._id && (
+                  <div className="absolute right-0 top-10 z-30 bg-white border rounded-xl shadow-xl p-2 min-w-[190px]">
+
+                    {/* Bookmark */}
+                    <div className="px-2 py-2 flex items-center justify-between hover:bg-gray-50 rounded-lg">
+
+                      <span className="text-sm">
+                        Bookmark
+                      </span>
+
+                      <BookmarkButton
+                        messageId={
+                          message._id
+                        }
+                      />
+
+                    </div>
+
+                    {/* Self destruct */}
+                    <div className="px-2 py-2 border-t mt-1">
+
+                      <p className="text-xs text-gray-500 mb-2">
+                        Self-destruct
+                      </p>
+
+                      <SelfDestructSelector
+                        messageId={
+                          message._id
+                        }
+                        onUpdated={(
+                          updated
+                        ) => {
+                          setLocalMessages(
+                            (prev) =>
+                              prev.map(
+                                (item) =>
+                                  item._id ===
+                                  message._id
+                                    ? {
+                                        ...item,
+                                        ...updated,
+                                      }
+                                    : item
+                              )
+                          );
+                        }}
+                      />
+
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+
             </div>
-          </div>
-        ))}
+          );
+        })}
+
+        <div ref={bottomRef} />
 
       </div>
-
-      <MessageInput />
-
     </div>
   );
+}
+
+function MessageContent({
+  message,
+}) {
+
+  // Image
+  if (
+    message.messageType ===
+      "image" &&
+    message.image
+  ) {
+    return (
+      <img
+        src={message.image}
+        alt="attachment"
+        className="max-w-full max-h-80 rounded-xl object-cover"
+      />
+    );
+  }
+
+  // Audio
+  if (
+    message.messageType ===
+      "audio" &&
+    message.audio
+  ) {
+    return (
+      <audio
+        controls
+        src={message.audio}
+        className="max-w-full"
+      />
+    );
+  }
+
+  // Video
+  if (
+    message.messageType ===
+      "video" &&
+    message.video
+  ) {
+    return (
+      <video
+        controls
+        src={message.video}
+        className="max-w-full max-h-80 rounded-xl"
+      />
+    );
+  }
+
+  // Normal text
+  return (
+    <p className="whitespace-pre-wrap break-words">
+      {message.text}
+    </p>
+  );
+}
+
+function getExpiryText(message) {
+  if (!message.expiresAt) {
+    return "self-destruct";
+  }
+
+  const seconds = Math.max(
+    0,
+    Math.round(
+      (new Date(
+        message.expiresAt
+      ) -
+        Date.now()) /
+        1000
+    )
+  );
+
+  return seconds > 0
+    ? `${seconds}s`
+    : "expired";
 }
 
 export default ChatWindow;

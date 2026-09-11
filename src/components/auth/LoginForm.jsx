@@ -19,7 +19,7 @@ function LoginForm(){
 
       alert(response.message);
 
-      navigate("/dashboard");
+      navigate("/chat");
     } catch (error) {
       alert(error.response?.data?.message || "Login Failed");
     }

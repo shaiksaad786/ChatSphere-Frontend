@@ -24,7 +24,7 @@ function RegisterForm(){
 
     alert(response.message);
 
-    navigate("/dashboard");
+    navigate("/chat");
 
   } catch (error) {
     alert(error.response?.data?.message || "Registration Failed");
