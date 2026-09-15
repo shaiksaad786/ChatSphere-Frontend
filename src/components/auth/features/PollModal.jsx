@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { usePreferences } from "../../../context/AppPreferences";
 import { createPoll } from "../../../services/chatService";
 
 function PollModal({ conversationId, onClose, onCreated }) {
+  const { t } = usePreferences();
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
   const [expiresAt, setExpiresAt] = useState("");
@@ -56,7 +58,7 @@ function PollModal({ conversationId, onClose, onCreated }) {
       <input
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder="Ask a question..."
+        placeholder={t("askQuestion")}
         className="w-full border rounded-lg p-3 mb-3"
       />
 
@@ -101,7 +103,7 @@ function PollModal({ conversationId, onClose, onCreated }) {
         disabled={loading}
         className="w-full bg-indigo-600 text-white py-3 rounded-lg"
       >
-        {loading ? "Creating..." : "Create Poll"}
+        {loading ? t("creating") : t("createPoll")}
       </button>
     </Modal>
   );

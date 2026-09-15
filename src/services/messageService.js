@@ -58,3 +58,12 @@ export const deleteMessage = async (
 
   return response.data;
 };
+export const getUnreadMessageCount = async () => {
+  const response = await api.get('/messages/unread-count');
+  return response.data.unreadCount || 0;
+};
+
+export const rescheduleMessage = async (messageId, scheduledAt) => {
+  const response = await api.put(`/messages/schedule/${messageId}`, { scheduledAt });
+  return response.data.data?.scheduledMessage || response.data.data;
+};

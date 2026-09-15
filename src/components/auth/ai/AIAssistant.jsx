@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePreferences } from "../../../context/AppPreferences";
 import {
   smartReply,
   summarize,
@@ -8,6 +9,7 @@ import {
 } from "../../../services/aiService";
 
 function AIAssistant({ messages, onUseReply, onClose }) {
+  const { t } = usePreferences();
   const [mode, setMode] = useState("smart");
   const [input, setInput] = useState("");
   const [result, setResult] = useState("");
@@ -82,8 +84,8 @@ function AIAssistant({ messages, onUseReply, onClose }) {
     <aside className="w-full md:w-[350px] border-l bg-white flex flex-col">
       <div className="p-4 border-b flex items-center justify-between">
         <div>
-          <h2 className="font-bold text-lg">✨ AI Assistant</h2>
-          <p className="text-xs text-gray-500">Powered by your backend</p>
+          <h2 className="font-bold text-lg">✨ {t("aiAssistant")}</h2>
+          <p className="text-xs text-gray-500">{t("poweredByBackend")}</p>
         </div>
         <button
           onClick={onClose}
@@ -95,11 +97,11 @@ function AIAssistant({ messages, onUseReply, onClose }) {
 
       <div className="p-3 grid grid-cols-3 gap-2 border-b">
         {[
-          ["smart", "Smart"],
-          ["summarize", "Summary"],
-          ["rephrase", "Rephrase"],
-          ["explain", "Explain"],
-          ["translate", "Translate"],
+          ["smart", t("smart")],
+          ["summarize", t("summary")],
+          ["rephrase", t("rephrase")],
+          ["explain", t("explain")],
+          ["translate", t("translate")],
         ].map(([value, label]) => (
           <button
             key={value}
@@ -157,7 +159,7 @@ function AIAssistant({ messages, onUseReply, onClose }) {
 
         {replies.length > 0 && (
           <div className="mt-5 space-y-2">
-            <h3 className="font-semibold">Smart replies</h3>
+            <h3 className="font-semibold">{t("smartReplies")}</h3>
             {replies.map((reply, index) => (
               <button
                 key={index}
@@ -172,7 +174,7 @@ function AIAssistant({ messages, onUseReply, onClose }) {
 
         {result && (
           <div className="mt-5">
-            <h3 className="font-semibold mb-2">AI response</h3>
+            <h3 className="font-semibold mb-2">{t("aiResponse")}</h3>
             <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100 whitespace-pre-wrap text-sm">
               {result}
             </div>

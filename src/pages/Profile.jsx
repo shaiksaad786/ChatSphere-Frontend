@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import { getProfile, updateProfile } from "../services/profileService";
+import { uploadMedia } from "../services/mediaService";
+import { usePreferences } from "../context/AppPreferences";
 
 function Profile() {
+  const { t } = usePreferences();
   const [isEditing, setIsEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const [user, setUser] = useState({
     name: "",

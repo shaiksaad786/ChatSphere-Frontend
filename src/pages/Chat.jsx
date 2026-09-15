@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usePreferences } from "../context/AppPreferences";
 import { io } from "socket.io-client";
 
 import ConversationList from "../components/auth/chat/ConversationList";
@@ -9,6 +10,7 @@ import MessageInput from "../components/auth/chat/MessageInput";
 import AIAssistant from "../components/auth/ai/AIAssistant";
 import PollModal from "../components/auth/features/PollModal";
 import ToolsPanel from "../components/auth/features/ToolsPanel";
+import GroupManager from "../components/auth/chat/GroupManager";
 
 import {
   getConversations,
@@ -16,9 +18,10 @@ import {
   markMessagesRead,
 } from "../services/chatService";
 
-const SOCKET_URL = "http://localhost:3000";
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3000";
 
 function Chat() {
+  const { t } = usePreferences();
   const [conversations, setConversations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -35,6 +38,7 @@ function Chat() {
 
   const [onlineUsers, setOnlineUsers] = useState({});
   const [typing, setTyping] = useState(false);
+  const [groupManagerOpen, setGroupManagerOpen] = useState(false);
 
   const currentUserId = useMemo(
     getCurrentUserId,
@@ -119,6 +123,20 @@ function Chat() {
         );
       }
     );
+
+    socket.on("messageUpdated", (updated) => {
+      if (selected && String(updated.conversation) === String(selected._id)) {
+        setMessages(prev => prev.map(message => String(message._id) === String(updated._id) ? { ...message, ...updated } : message));
+      }
+      loadConversations();
+    });
+
+    socket.on("messageDeleted", ({ messageId, conversationId }) => {
+      if (!selected || String(conversationId) === String(selected._id)) {
+        setMessages(prev => prev.filter(message => String(message._id) !== String(messageId)));
+      }
+      loadConversations();
+    });
 
     // Self destruct
     socket.on(
@@ -263,13 +281,16 @@ function Chat() {
     : false;
 
   return (
-    <div className="h-full w-full flex bg-gray-100 overflow-hidden">
+    <div className="h-full w-full flex bg-gray-100 overflow-hidden app-surface">
 
       {/* Conversations */}
       <ConversationList
         conversations={conversations}
         selectedId={selected?._id}
         onSelect={selectConversation}
+        onConversationCreated={(conversation) => {
+          setConversations((prev) => prev.some((item) => item._id === conversation._id) ? prev : [conversation, ...prev]);
+        }}
         loading={loadingConversations}
       />
 
@@ -280,12 +301,13 @@ function Chat() {
         <ChatHeader
           conversation={selected}
           online={online}
+          onGroupManage={() => setGroupManagerOpen(true)}
         />
 
         {/* Messages */}
         {loadingMessages ? (
           <div className="flex-1 flex items-center justify-center text-gray-500">
-            Loading messages...
+            {t("loadingMessages")}
           </div>
         ) : (
           <ChatWindow
@@ -297,7 +319,7 @@ function Chat() {
         {/* Typing */}
         {typing && (
           <div className="px-5 py-1 bg-white text-xs text-gray-500">
-            Someone is typing...
+            {t("someoneTyping")}
           </div>
         )}
 
@@ -311,7 +333,7 @@ function Chat() {
             className="px-3 py-2 rounded-lg hover:bg-gray-100 disabled:opacity-40"
             title="Create Poll"
           >
-            📊 Poll
+            📊 {t("poll")}
           </button>
 
           {/* More */}
@@ -326,7 +348,7 @@ function Chat() {
             }`}
             title="Bookmarks and scheduled messages"
           >
-            ⭐ More
+            ⭐ {t("more")}
           </button>
 
         </div>
@@ -369,6 +391,16 @@ function Chat() {
       )}
 
       {/* Poll */}
+      {groupManagerOpen && selected?.isGroup && (
+        <GroupManager
+          group={selected}
+          currentUserId={currentUserId}
+          onClose={() => setGroupManagerOpen(false)}
+          onUpdated={(updated) => { setSelected(updated); setConversations(prev => prev.map(c => c._id === updated._id ? updated : c)); }}
+          onDeleted={() => { setSelected(null); setMessages([]); loadConversations(); }}
+        />
+      )}
+
       {pollOpen && selected && (
         <PollModal
           conversationId={selected._id}

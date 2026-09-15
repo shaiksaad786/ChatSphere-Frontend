@@ -6,7 +6,7 @@ export const uploadMedia = async (file) => {
 
   const formData = new FormData();
 
-  formData.append("file", file);
+  formData.append("media", file);
 
   const response = await fetch(
     `${API_URL}/api/media/upload`,
@@ -23,5 +23,6 @@ export const uploadMedia = async (file) => {
     throw new Error("Media upload failed");
   }
 
-  return response.json();
+  const data = await response.json();
+  return data.data || [];
 };

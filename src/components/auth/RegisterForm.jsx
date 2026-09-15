@@ -1,11 +1,12 @@
+import { usePreferences } from "../../context/AppPreferences";
 import {useForm} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema } from "../../validations/authSchema";
 import { Link } from "react-router-dom";
 import { registerUser } from "../../services/authService";
 import { useNavigate } from "react-router-dom";
-import { saveToken } from "../../utils/auth";
 function RegisterForm(){
+    const { t } = usePreferences();
     const navigate = useNavigate();
     const {register, handleSubmit, formState: {errors},} = useForm({
         resolver: zodResolver(registerSchema),
@@ -20,11 +21,9 @@ function RegisterForm(){
       gender: data.gender,
     });
 
-    saveToken(response.token);
-
     alert(response.message);
 
-    navigate("/chat");
+    navigate("/login");
 
   } catch (error) {
     alert(error.response?.data?.message || "Registration Failed");
@@ -36,18 +35,18 @@ function RegisterForm(){
                 ChatSphere
             </h1>
             <p className="text-center text-gray-500 mt-2">
-                Create Account
+                {t("createAccount")}
             </p>
             <form onSubmit = {handleSubmit(onSubmit)} className="mt-8">
                 <div className="mb-4">
                     <label className="block mb-2 font-medium">
-                        Full Name : 
+                        {t("fullName")} : 
                     </label>
                     <input 
                     type="text" 
                     className="w-full border rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500"
                     {...register("fullName")}
-                    placeholder="Enter Your Name" 
+                    placeholder={t("enterName")} 
                     />
                     <p className="text-red-500 text-sm mb-3">
                         {errors.fullName?.message}
@@ -55,12 +54,12 @@ function RegisterForm(){
                 </div>
                 <div className="mb-4">
                     <label className="block mb-2 font-medium">
-                        Email : 
+                        {t("email")} : 
                     </label>
                     <input 
                     type="email"
                     className="w-full border rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500" 
-                    placeholder="Enter Your Email"
+                    placeholder={t("enterEmail")}
                     {...register("email")}
                     />
                     <p className="text-red-500 text-sm mb-3">
@@ -69,12 +68,12 @@ function RegisterForm(){
                 </div>
                 <div className="mb-4">
                     <label className="block mb-2 font-medium">
-                        Password : 
+                        {t("password")} : 
                     </label>
                     <input 
                     type="password" 
                     className="w-full border rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500" 
-                    placeholder="Create Password"
+                    placeholder={t("createPassword")}
                      {...register("password")}
                     />
                      <p className="text-red-500 text-sm mb-3">
@@ -83,12 +82,12 @@ function RegisterForm(){
                 </div>
                 <div className="mb-6">
                     <label className="block mb-2 font-medium">
-                        Confirm Password : 
+                        Confirm {t("password")} : 
                     </label>
                     <input 
                     type="password" 
                     className="w-full border rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500" 
-                    placeholder="Confirm Password"
+                    placeholder={t("confirmPasswordPlaceholder")}
                     {...register("confirmPassword")}
                     />
                     <p className="text-red-500 text-sm mb-5">
@@ -104,9 +103,9 @@ function RegisterForm(){
                     {...register("gender")}
                     className="w-full border p-3 rounded-lg"
                     >
-                    <option value="">Select Gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
+                    <option value="">{t("selectGender")}</option>
+                    <option value="male">{t("male")}</option>
+                    <option value="female">{t("female")}</option>
                     </select>
 
                     <p className="text-red-500 text-sm">
@@ -118,7 +117,7 @@ function RegisterForm(){
                 </button>
             </form>
             <p className="text-center mt-6">
-                Already Have an account?
+                {t("haveAccount")}
                 <Link to="/login" className = "text-indigo-600 ml-2 font-semibold">
                 Login
                 </Link>

@@ -4,6 +4,13 @@ export const getConversations = async () => {
   const res = await api.get("/conversations");
   return res.data.data || [];
 };
+export const getOrCreateDirectConversation = async (receiverId) => {
+  const res = await api.post("/conversations/direct", {
+    receiverId,
+  });
+
+  return res.data.data;
+};
 
 export const getMessages = async (conversationId) => {
   const res = await api.get(`/messages/${conversationId}`);
@@ -12,6 +19,7 @@ export const getMessages = async (conversationId) => {
 
 export const sendMessage = async ({
   receiverId,
+  conversationId,
   text,
   imageFile,
   audio,
@@ -19,7 +27,8 @@ export const sendMessage = async ({
 }) => {
   const formData = new FormData();
 
-  formData.append("receiverId", receiverId);
+  if (receiverId) formData.append("receiverId", receiverId);
+  if (conversationId) formData.append("conversationId", conversationId);
 
   if (text) formData.append("text", text);
   if (audio) formData.append("audio", audio);

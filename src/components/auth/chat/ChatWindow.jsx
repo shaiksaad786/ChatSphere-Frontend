@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from "react";
 
 import BookmarkButton from "./BookmarkButton";
 import SelfDestructSelector from "./SelfDestructSelector";
+import { editMessage, deleteMessage } from "../../../services/messageService";
+import { usePreferences } from "../../../context/AppPreferences";
 
 function ChatWindow({
   messages,
   currentUserId,
 }) {
+  const { t } = usePreferences();
   const bottomRef = useRef(null);
 
   const [openMenu, setOpenMenu] =
@@ -150,6 +153,32 @@ function ChatWindow({
                 {openMenu ===
                   message._id && (
                   <div className="absolute right-0 top-10 z-30 bg-white border rounded-xl shadow-xl p-2 min-w-[190px]">
+
+                    {mine && message.messageType === "text" && !message.isRead && (
+                      <button
+                        className="w-full text-left px-2 py-2 hover:bg-gray-50 rounded-lg text-sm"
+                        onClick={async () => {
+                          const next = window.prompt("Edit message", message.text || "");
+                          if (next === null || !next.trim() || next.trim() === message.text) return;
+                          try {
+                            const result = await editMessage(message._id, next.trim());
+                            const updated = result.data?.message || result.data || result;
+                            setLocalMessages(prev => prev.map(item => item._id === message._id ? { ...item, ...updated, text: next.trim() } : item));
+                            setOpenMenu(null);
+                          } catch (error) { alert(error.response?.data?.message || "Unable to edit message"); }
+                        }}
+                      >✏️ Edit message</button>
+                    )}
+                    {mine && (
+                      <button
+                        className="w-full text-left px-2 py-2 hover:bg-red-50 rounded-lg text-sm text-red-600"
+                        onClick={async () => {
+                          if (!window.confirm("Delete this message?")) return;
+                          try { await deleteMessage(message._id); setLocalMessages(prev => prev.filter(item => item._id !== message._id)); setOpenMenu(null); }
+                          catch (error) { alert(error.response?.data?.message || "Unable to delete message"); }
+                        }}
+                      >🗑️ Delete message</button>
+                    )}
 
                     {/* Bookmark */}
                     <div className="px-2 py-2 flex items-center justify-between hover:bg-gray-50 rounded-lg">

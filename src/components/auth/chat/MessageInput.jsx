@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { usePreferences } from "../../../context/AppPreferences";
 import { sendMessage, scheduleMessage } from "../../../services/chatService";
+import VoiceRecorder from "./VoiceRecorder";
 
 function MessageInput({
   conversation,
@@ -12,6 +14,8 @@ function MessageInput({
   const [showMore, setShowMore] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
+  const [audioFile, setAudioFile] = useState(null);
+  const { t } = usePreferences();
   const [sending, setSending] = useState(false);
   const fileRef = useRef(null);
 
@@ -23,21 +27,24 @@ function MessageInput({
     ) || conversation?.participants?.[0];
 
   const send = async () => {
-    if ((!text.trim() && !file) || !other?._id) return;
+    if ((!text.trim() && !file && !audioFile) || (!other?._id && !conversation?.isGroup)) return;
 
     setSending(true);
 
     try {
       const message = await sendMessage({
-        receiverId: other._id,
+        receiverId: other?._id,
+        conversationId: conversation.isGroup ? conversation._id : undefined,
         text: text.trim(),
         imageFile: file,
+        audio: audioFile,
         expiresIn: expiresIn || undefined,
       });
 
       setText("");
       setFile(null);
       setExpiresIn("");
+      setAudioFile(null);
       onMessageSent(message);
     } catch (error) {
       alert(error.response?.data?.message || "Failed to send message");
@@ -47,6 +54,7 @@ function MessageInput({
   };
 
   const schedule = async () => {
+    if (conversation?.isGroup) { alert("Scheduled group messages are not supported by the current backend."); return; }
     if (!text.trim() || !scheduledAt || !conversation?._id || !other?._id) {
       alert("Enter message and future date/time.");
       return;
@@ -55,7 +63,7 @@ function MessageInput({
     try {
       await scheduleMessage({
         conversationId: conversation._id,
-        receiverId: other._id,
+        receiverId: other?._id,
         text: text.trim(),
         scheduledAt: new Date(scheduledAt).toISOString(),
         messageType: "text",
@@ -86,6 +94,13 @@ function MessageInput({
 
   return (
     <div className="bg-white border-t p-3">
+      {audioFile && (
+        <div className="mb-2 flex items-center justify-between bg-green-50 p-2 rounded-lg">
+          <span className="text-sm truncate">🎤 {audioFile.name}</span>
+          <button onClick={() => setAudioFile(null)}>×</button>
+        </div>
+      )}
+
       {file && (
         <div className="mb-2 flex items-center justify-between bg-gray-100 p-2 rounded-lg">
           <span className="text-sm truncate">📎 {file.name}</span>
@@ -96,7 +111,7 @@ function MessageInput({
       {showMore && (
         <div className="mb-3 flex flex-wrap gap-2">
           <label className="px-3 py-2 bg-gray-100 rounded-lg cursor-pointer">
-            🖼️ Image
+            🖼️ Media
             <input
               ref={fileRef}
               type="file"
@@ -117,11 +132,14 @@ function MessageInput({
             💣 Self-destruct {expiresIn ? "(30s)" : ""}
           </button>
 
+          <VoiceRecorder onRecordingComplete={(audio) => setAudioFile(audio)} />
+          {audioFile && <span className="px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm">🎤 {audioFile.name}</span>}
+
           <button
             onClick={() => setShowSchedule(!showSchedule)}
             className="px-3 py-2 bg-gray-100 rounded-lg"
           >
-            🕐 Schedule
+            🕐 {t("schedule")}
           </button>
         </div>
       )}
@@ -158,7 +176,7 @@ function MessageInput({
           rows="1"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={t("typeMessage")}
           className="flex-1 resize-none border rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-400"
         />
 

@@ -1,110 +1,14 @@
 import { useEffect, useState } from "react";
-import {
-  getBookmarks,
-  getScheduledMessages,
-  cancelScheduledMessage,
-} from "../../../services/chatService";
+import { usePreferences } from "../../../context/AppPreferences";
+import { getBookmarks, getScheduledMessages, cancelScheduledMessage } from "../../../services/chatService";
+import { rescheduleMessage as rescheduleApi } from "../../../services/messageService";
 
-function ToolsPanel({ onClose }) {
-  const [tab, setTab] = useState("bookmarks");
-  const [bookmarks, setBookmarks] = useState([]);
-  const [scheduled, setScheduled] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      if (tab === "bookmarks") {
-        setBookmarks(await getBookmarks());
-      } else {
-        setScheduled(await getScheduledMessages());
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, [tab]);
-
-  const cancel = async (id) => {
-    try {
-      await cancelScheduledMessage(id);
-      await load();
-    } catch (error) {
-      alert(error.response?.data?.message || "Failed to cancel");
-    }
-  };
-
-  return (
-    <aside className="w-full md:w-[330px] bg-white border-l">
-      <div className="p-4 border-b flex justify-between">
-        <h2 className="font-bold">More</h2>
-        <button onClick={onClose}>×</button>
-      </div>
-
-      <div className="p-3 grid grid-cols-2 gap-2">
-        <button
-          onClick={() => setTab("bookmarks")}
-          className={`p-2 rounded-lg ${
-            tab === "bookmarks"
-              ? "bg-indigo-600 text-white"
-              : "bg-gray-100"
-          }`}
-        >
-          ⭐ Bookmarks
-        </button>
-        <button
-          onClick={() => setTab("scheduled")}
-          className={`p-2 rounded-lg ${
-            tab === "scheduled"
-              ? "bg-indigo-600 text-white"
-              : "bg-gray-100"
-          }`}
-        >
-          🕐 Scheduled
-        </button>
-      </div>
-
-      <div className="p-4 overflow-y-auto">
-        {loading && <p>Loading...</p>}
-
-        {tab === "bookmarks" &&
-          bookmarks.map((item) => (
-            <div
-              key={item._id}
-              className="border rounded-xl p-3 mb-2"
-            >
-              <p className="text-sm">
-                {item.message?.text || "Media message"}
-              </p>
-            </div>
-          ))}
-
-        {tab === "scheduled" &&
-          scheduled.map((item) => (
-            <div
-              key={item._id}
-              className="border rounded-xl p-3 mb-2"
-            >
-              <p className="text-sm">{item.text}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {new Date(item.scheduledAt).toLocaleString()}
-              </p>
-              <button
-                onClick={() => cancel(item._id)}
-                className="text-red-500 text-sm mt-2"
-              >
-                Cancel
-              </button>
-            </div>
-          ))}
-      </div>
-    </aside>
-  );
+function toLocalInput(date){ const d=new Date(date); const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+export default function ToolsPanel({ onClose }) {
+  const { t }=usePreferences(); const [tab,setTab]=useState('bookmarks'); const [bookmarks,setBookmarks]=useState([]); const [scheduled,setScheduled]=useState([]); const [loading,setLoading]=useState(false); const [editing,setEditing]=useState(null);
+  const load=async()=>{setLoading(true);try{if(tab==='bookmarks')setBookmarks(await getBookmarks());else setScheduled(await getScheduledMessages())}catch(e){console.error(e)}finally{setLoading(false)}};
+  useEffect(()=>{load()},[tab]);
+  const cancel=async id=>{try{await cancelScheduledMessage(id);await load()}catch(e){alert(e.response?.data?.message||'Failed to cancel')}};
+  const saveReschedule=async()=>{if(!editing?.at)return;try{await rescheduleApi(editing.id,new Date(editing.at).toISOString());setEditing(null);await load()}catch(e){alert(e.response?.data?.message||'Failed to reschedule')}};
+  return <aside className="w-full md:w-[360px] bg-white border-l app-surface flex flex-col"><div className="p-4 border-b flex justify-between"><h2 className="font-bold">{t('more')}</h2><button onClick={onClose}>×</button></div><div className="p-3 grid grid-cols-2 gap-2"><button onClick={()=>setTab('bookmarks')} className={`p-2 rounded-lg ${tab==='bookmarks'?'bg-indigo-600 text-white':'bg-gray-100'}`}>⭐ {t('bookmarks')}</button><button onClick={()=>setTab('scheduled')} className={`p-2 rounded-lg ${tab==='scheduled'?'bg-indigo-600 text-white':'bg-gray-100'}`}>🕐 {t('scheduled')}</button></div><div className="p-4 overflow-y-auto flex-1">{loading&&<p>{t('loading')}</p>}{tab==='bookmarks'&&bookmarks.map(item=><div key={item._id} className="border rounded-xl p-3 mb-2"><p className="text-sm">{item.message?.text||t('mediaMessage')}</p></div>)}{tab==='scheduled'&&scheduled.map(item=><div key={item._id} className="border rounded-xl p-3 mb-2"><p className="text-sm">{item.text}</p><p className="text-xs text-gray-500 mt-1">{new Date(item.scheduledAt).toLocaleString()}</p><div className="flex gap-2 mt-2"><button onClick={()=>setEditing({id:item._id,at:toLocalInput(item.scheduledAt)})} className="text-indigo-600 text-sm">Reschedule</button><button onClick={()=>cancel(item._id)} className="text-red-500 text-sm">{t('cancel')}</button></div></div>)}{!loading&&tab==='scheduled'&&!scheduled.length&&<p className="text-sm text-gray-500">No pending scheduled messages.</p>}</div>{editing&&<div className="border-t p-4"><h3 className="font-semibold mb-2">Reschedule message</h3><input type="datetime-local" min={toLocalInput(new Date())} value={editing.at} onChange={e=>setEditing({...editing,at:e.target.value})} className="w-full border rounded-lg px-3 py-2"/><div className="flex gap-2 mt-3"><button onClick={()=>setEditing(null)} className="flex-1 py-2 rounded-lg bg-gray-100">{t('cancel')}</button><button onClick={saveReschedule} className="flex-1 py-2 rounded-lg bg-indigo-600 text-white">Save</button></div></div>}</aside>
 }
-
-export default ToolsPanel;

@@ -21,3 +21,7 @@ export const updatePreferences = async (preferenceData) => {
 
   return response.data;
 };
+export const searchUsers = async (query) => {
+  const response = await api.get("/users/search", { params: { q: query } });
+  return response.data.users || [];
+};
