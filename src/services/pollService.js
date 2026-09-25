@@ -1,32 +1,25 @@
 import api from "./api";
 
-export const createPoll = async (
-  pollData
-) => {
-  const response = await api.post(
-    "/polls",
-    pollData
-  );
+export const createPoll = async ({
+  conversationId,
+  question,
+  options,
+  expiresAt = null,
+}) => {
+  const response = await api.post("/polls", {
+    conversationId,
+    question,
+    options,
+    expiresAt,
+  });
 
-  return (
-    response.data?.data?.poll ||
-    response.data?.poll ||
-    response.data
-  );
+  return response.data?.data || null;
 };
 
-export const getPoll = async (
-  pollId
-) => {
-  const response = await api.get(
-    `/polls/${pollId}`
-  );
+export const getPoll = async (pollId) => {
+  const response = await api.get(`/polls/${pollId}`);
 
-  return (
-    response.data?.data?.poll ||
-    response.data?.data ||
-    response.data
-  );
+  return response.data?.data || null;
 };
 
 export const votePoll = async (
@@ -35,24 +28,16 @@ export const votePoll = async (
 ) => {
   const response = await api.post(
     `/polls/${pollId}/vote`,
-    {
-      optionId,
-    }
+    { optionId }
   );
 
-  return (
-    response.data?.data?.poll ||
-    response.data?.data ||
-    response.data
-  );
+  return response.data?.data || null;
 };
 
-export const deletePoll = async (
-  pollId
-) => {
-  const response = await api.delete(
-    `/polls/${pollId}`
+export const closePoll = async (pollId) => {
+  const response = await api.patch(
+    `/polls/${pollId}/close`
   );
 
-  return response.data;
+  return response.data?.data || null;
 };

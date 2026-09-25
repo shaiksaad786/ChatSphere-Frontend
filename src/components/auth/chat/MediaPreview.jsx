@@ -1,44 +1,122 @@
-function MediaPreview({ file, onRemove }) {
-  if (!file) return null;
+import { useEffect, useState } from "react";
 
-  const previewUrl = URL.createObjectURL(file);
+function MediaPreview({
+  file,
+  onRemove,
+}) {
+  const [previewUrl, setPreviewUrl] =
+    useState("");
 
-  const isImage = file.type.startsWith("image/");
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl("");
+      return;
+    }
+
+    const url =
+      URL.createObjectURL(file);
+
+    setPreviewUrl(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
+
+  if (!file) {
+    return null;
+  }
+
+  const isImage =
+    file.type.startsWith("image/");
+
+  const isVideo =
+    file.type.startsWith("video/");
+
+  const isAudio =
+    file.type.startsWith("audio/");
+
+  const isDocument =
+    !isImage &&
+    !isVideo &&
+    !isAudio;
+
+  const sizeMB = (
+    file.size /
+    1024 /
+    1024
+  ).toFixed(2);
 
   return (
     <div className="p-3 border-t bg-gray-50">
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
 
-        <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
 
-          {isImage ? (
+          {isImage && (
             <img
               src={previewUrl}
-              alt="preview"
-              className="w-16 h-16 object-cover rounded"
+              alt="Selected media preview"
+              className="max-w-full max-h-64 rounded-lg object-contain"
             />
-          ) : (
-            <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-2xl">
-              📄
+          )}
+
+          {isVideo && (
+            <video
+              src={previewUrl}
+              controls
+              className="max-w-full max-h-64 rounded-lg"
+            />
+          )}
+
+          {isAudio && (
+            <audio
+              src={previewUrl}
+              controls
+              className="w-full"
+            />
+          )}
+
+          {isDocument && (
+            <div className="flex items-center gap-3 p-4 bg-white border rounded-lg">
+
+              <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-2xl">
+                📄
+              </div>
+
+              <div className="min-w-0">
+                <p className="font-medium truncate">
+                  {file.name}
+                </p>
+
+                <p className="text-sm text-gray-500">
+                  {file.type || "Document"}
+                </p>
+              </div>
+
             </div>
           )}
 
-          <div>
-            <p className="font-medium">
+          <div className="mt-2">
+
+            <p className="font-medium truncate">
               {file.name}
             </p>
 
             <p className="text-sm text-gray-500">
-              {(file.size / 1024 / 1024).toFixed(2)} MB
+              {sizeMB} MB
             </p>
+
           </div>
 
         </div>
 
         <button
+          type="button"
           onClick={onRemove}
-          className="text-red-500 font-bold"
+          className="text-red-500 font-bold hover:text-red-700"
+          title="Remove file"
         >
           ✕
         </button>

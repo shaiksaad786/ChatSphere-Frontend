@@ -1,33 +1,42 @@
 import { useState } from "react";
 import { usePreferences } from "../../../context/AppPreferences";
+
 import {
   smartReply,
   summarize,
   explain,
   rephrase,
-  translateText,
 } from "../../../services/aiService";
 
-function AIAssistant({ messages, onUseReply, onClose }) {
+function AIAssistant({
+  messages,
+  onUseReply,
+  onClose,
+}) {
   const { t } = usePreferences();
+
   const [mode, setMode] = useState("smart");
   const [input, setInput] = useState("");
   const [result, setResult] = useState("");
   const [replies, setReplies] = useState([]);
-  const [target, setTarget] = useState("te");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const latestText =
     messages?.length > 0
-      ? messages[messages.length - 1]?.text || ""
+      ? messages[messages.length - 1]?.text ||
+        messages[messages.length - 1]?.content ||
+        ""
       : "";
 
   const runAI = async () => {
-    const text = input.trim() || latestText;
+    const text =
+      input.trim() || latestText;
 
     if (!text) {
-      setError("Enter or select some text first.");
+      setError(
+        "Enter or select some text first."
+      );
       return;
     }
 
@@ -39,35 +48,33 @@ function AIAssistant({ messages, onUseReply, onClose }) {
     try {
       if (mode === "smart") {
         const data = await smartReply(text);
-        setReplies(data.replies || []);
+
+        setReplies(
+          data.replies || []
+        );
       }
 
       if (mode === "summarize") {
         const data = await summarize(text);
-        setResult(data.summary || "");
+
+        setResult(
+          data.summary || ""
+        );
       }
 
       if (mode === "rephrase") {
         const data = await rephrase(text);
-        setResult(data.rephrasedText || "");
+
+        setResult(
+          data.rephrasedText || ""
+        );
       }
 
       if (mode === "explain") {
         const data = await explain(text);
-        setResult(data.explanation || "");
-      }
-
-      if (mode === "translate") {
-        const data = await translateText({
-          text,
-          target,
-        });
 
         setResult(
-          data.translation ||
-            data.translatedText ||
-            data.text ||
-            JSON.stringify(data)
+          data.explanation || ""
         );
       }
     } catch (err) {
@@ -81,35 +88,50 @@ function AIAssistant({ messages, onUseReply, onClose }) {
   };
 
   return (
-    <aside className="w-full md:w-[350px] border-l bg-white flex flex-col">
-      <div className="p-4 border-b flex items-center justify-between">
+    <aside className="flex w-full flex-col border-l bg-white md:w-[350px]">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b p-4">
         <div>
-          <h2 className="font-bold text-lg">✨ {t("aiAssistant")}</h2>
-          <p className="text-xs text-gray-500">{t("poweredByBackend")}</p>
+          <h2 className="text-lg font-bold">
+            ✨ {t("aiAssistant")}
+          </h2>
+
+          <p className="text-xs text-gray-500">
+            {t("poweredByBackend")}
+          </p>
         </div>
+
         <button
+          type="button"
           onClick={onClose}
-          className="text-gray-500 hover:text-black text-xl"
+          className="text-xl text-gray-500 hover:text-black"
+          aria-label="Close AI Assistant"
         >
           ×
         </button>
       </div>
 
-      <div className="p-3 grid grid-cols-3 gap-2 border-b">
+      {/* AI modes */}
+      <div className="grid grid-cols-2 gap-2 border-b p-3">
         {[
           ["smart", t("smart")],
           ["summarize", t("summary")],
           ["rephrase", t("rephrase")],
           ["explain", t("explain")],
-          ["translate", t("translate")],
         ].map(([value, label]) => (
           <button
+            type="button"
             key={value}
-            onClick={() => setMode(value)}
-            className={`px-2 py-2 rounded-lg text-xs font-medium ${
+            onClick={() => {
+              setMode(value);
+              setResult("");
+              setReplies([]);
+              setError("");
+            }}
+            className={`rounded-lg px-2 py-2 text-xs font-medium transition ${
               mode === value
                 ? "bg-indigo-600 text-white"
-                : "bg-gray-100 text-gray-700"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
             }`}
           >
             {label}
@@ -117,76 +139,87 @@ function AIAssistant({ messages, onUseReply, onClose }) {
         ))}
       </div>
 
-      <div className="p-4 flex-1 overflow-y-auto">
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-4">
         <textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(event) =>
+            setInput(event.target.value)
+          }
           placeholder={
             latestText
-              ? `Latest message: ${latestText.slice(0, 80)}`
+              ? `Latest message: ${latestText.slice(
+                  0,
+                  80
+                )}`
               : "Enter text..."
           }
-          className="w-full min-h-28 border rounded-xl p-3 outline-none focus:ring-2 focus:ring-indigo-400"
+          className="min-h-28 w-full rounded-xl border p-3 outline-none focus:ring-2 focus:ring-indigo-400"
         />
 
-        {mode === "translate" && (
-          <select
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            className="w-full border rounded-lg p-2 mt-3"
-          >
-            <option value="en">English</option>
-            <option value="te">Telugu</option>
-            <option value="hi">Hindi</option>
-            <option value="ta">Tamil</option>
-            <option value="kn">Kannada</option>
-          </select>
-        )}
-
+        {/* Generate */}
         <button
+          type="button"
           onClick={runAI}
           disabled={loading}
-          className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-3 rounded-xl font-semibold"
+          className="mt-3 w-full rounded-xl bg-indigo-600 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
         >
-          {loading ? "Working..." : "✨ Generate"}
+          {loading
+            ? "Working..."
+            : "✨ Generate"}
         </button>
 
+        {/* Error */}
         {error && (
-          <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
+          <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">
             {error}
           </div>
         )}
 
+        {/* Smart replies */}
         {replies.length > 0 && (
           <div className="mt-5 space-y-2">
-            <h3 className="font-semibold">{t("smartReplies")}</h3>
-            {replies.map((reply, index) => (
-              <button
-                key={index}
-                onClick={() => onUseReply(reply)}
-                className="w-full text-left p-3 border rounded-xl hover:bg-indigo-50"
-              >
-                {reply}
-              </button>
-            ))}
+            <h3 className="font-semibold">
+              {t("smartReplies")}
+            </h3>
+
+            {replies.map(
+              (reply, index) => (
+                <button
+                  type="button"
+                  key={index}
+                  onClick={() =>
+                    onUseReply(reply)
+                  }
+                  className="w-full rounded-xl border p-3 text-left hover:bg-indigo-50"
+                >
+                  {reply}
+                </button>
+              )
+            )}
           </div>
         )}
 
+        {/* AI result */}
         {result && (
           <div className="mt-5">
-            <h3 className="font-semibold mb-2">{t("aiResponse")}</h3>
-            <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100 whitespace-pre-wrap text-sm">
+            <h3 className="mb-2 font-semibold">
+              {t("aiResponse")}
+            </h3>
+
+            <div className="whitespace-pre-wrap rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm">
               {result}
             </div>
 
-            {mode !== "translate" && (
-              <button
-                onClick={() => onUseReply(result)}
-                className="w-full mt-3 border border-indigo-600 text-indigo-600 py-2 rounded-lg"
-              >
-                Use this in message
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() =>
+                onUseReply(result)
+              }
+              className="mt-3 w-full rounded-lg border border-indigo-600 py-2 text-indigo-600 hover:bg-indigo-50"
+            >
+              Use this in message
+            </button>
           </div>
         )}
       </div>

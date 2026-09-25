@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { usePreferences } from "../../../context/AppPreferences";
 import { sendMessage, scheduleMessage } from "../../../services/chatService";
 import VoiceRecorder from "./VoiceRecorder";
-
+import {
+  getSocket,
+} from "../../../services/socket";
+import MediaPreview from "./MediaPreview";
 function MessageInput({
   conversation,
   onMessageSent,
@@ -27,31 +30,74 @@ function MessageInput({
     ) || conversation?.participants?.[0];
 
   const send = async () => {
-    if ((!text.trim() && !file && !audioFile) || (!other?._id && !conversation?.isGroup)) return;
+  if (
+    !text.trim() &&
+    !file &&
+    !audioFile
+  ) {
+    return;
+  }
 
-    setSending(true);
+  if (
+    !conversation?.isGroup &&
+    !other?._id
+  ) {
+    return;
+  }
 
-    try {
-      const message = await sendMessage({
-        receiverId: other?._id,
-        conversationId: conversation.isGroup ? conversation._id : undefined,
+  if (conversation?.isGroup && !conversation?._id) {
+    return;
+  }
+
+  setSending(true);
+
+  try {
+    const message =
+      await sendMessage({
+        receiverId:
+          conversation.isGroup
+            ? undefined
+            : other?._id,
+
+        conversationId:
+          conversation.isGroup
+            ? conversation._id
+            : undefined,
+
         text: text.trim(),
-        imageFile: file,
-        audio: audioFile,
-        expiresIn: expiresIn || undefined,
+
+        file: file || undefined,
+
+        audio: audioFile || undefined,
+
+        expiresIn:
+          expiresIn || undefined,
       });
 
-      setText("");
-      setFile(null);
-      setExpiresIn("");
-      setAudioFile(null);
-      onMessageSent(message);
-    } catch (error) {
-      alert(error.response?.data?.message || "Failed to send message");
-    } finally {
-      setSending(false);
+    setText("");
+    setFile(null);
+    setExpiresIn("");
+    setAudioFile(null);
+
+    if (fileRef.current) {
+      fileRef.current.value = "";
     }
-  };
+
+    onMessageSent(message);
+  } catch (error) {
+    console.error(
+      "Send message failed:",
+      error
+    );
+
+    alert(
+      error.response?.data?.message ||
+        "Failed to send message"
+    );
+  } finally {
+    setSending(false);
+  }
+};
 
   const schedule = async () => {
     if (conversation?.isGroup) { alert("Scheduled group messages are not supported by the current backend."); return; }
@@ -77,7 +123,54 @@ function MessageInput({
       alert(error.response?.data?.message || "Failed to schedule message");
     }
   };
+  const typingTimerRef = useRef(null);
+  const handleTyping = (value) => {
+  setText(value);
 
+  const socket = getSocket();
+
+  if (!socket || !conversation) {
+    return;
+  }
+
+  if (conversation.isGroup) {
+    socket.emit("typing", {
+      conversationId: conversation._id,
+    });
+  } else if (other?._id) {
+    socket.emit("typing", {
+      receiverId: other._id,
+    });
+  }
+
+  if (typingTimerRef.current) {
+    clearTimeout(
+      typingTimerRef.current
+    );
+  }
+
+  typingTimerRef.current = setTimeout(() => {
+    if (conversation.isGroup) {
+      socket.emit("stopTyping", {
+        conversationId:
+          conversation._id,
+      });
+    } else if (other?._id) {
+      socket.emit("stopTyping", {
+        receiverId: other._id,
+      });
+    }
+  }, 1000);
+};
+  useEffect(() => {
+  return () => {
+    if (typingTimerRef.current) {
+      clearTimeout(
+        typingTimerRef.current
+      );
+    }
+  };
+}, []);
   useEffect(() => {
     const handler = (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -102,24 +195,53 @@ function MessageInput({
       )}
 
       {file && (
-        <div className="mb-2 flex items-center justify-between bg-gray-100 p-2 rounded-lg">
-          <span className="text-sm truncate">📎 {file.name}</span>
-          <button onClick={() => setFile(null)}>×</button>
-        </div>
-      )}
+  <MediaPreview
+    file={file}
+    onRemove={() => {
+      setFile(null);
+
+      if (fileRef.current) {
+        fileRef.current.value = "";
+      }
+    }}
+  />
+)}
 
       {showMore && (
         <div className="mb-3 flex flex-wrap gap-2">
           <label className="px-3 py-2 bg-gray-100 rounded-lg cursor-pointer">
-            🖼️ Media
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-            />
-          </label>
+  📎 Media
+
+    <input
+      ref={fileRef}
+      type="file"
+      accept="
+        image/jpeg,
+        image/png,
+        image/webp,
+        video/mp4,
+        video/mpeg,
+        video/quicktime,
+        video/webm,
+        audio/mpeg,
+        audio/wav,
+        audio/x-wav,
+        audio/mp4,
+        audio/webm,
+        audio/x-m4a,
+        application/pdf,
+        application/msword,
+        application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+        text/plain
+      "
+      hidden
+      onChange={(e) =>
+        setFile(
+          e.target.files?.[0] || null
+        )
+      }
+    />
+  </label>
 
           <button
             onClick={() =>
@@ -175,7 +297,9 @@ function MessageInput({
         <textarea
           rows="1"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) =>
+            handleTyping(e.target.value)
+          }
           placeholder={t("typeMessage")}
           className="flex-1 resize-none border rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-400"
         />

@@ -1,15 +1,41 @@
 import { useState } from "react";
 import api from "../../../services/api";
 
+const DURATIONS = [
+  {
+    value: 30,
+    label: "30 seconds",
+  },
+  {
+    value: 60,
+    label: "1 minute",
+  },
+  {
+    value: 300,
+    label: "5 minutes",
+  },
+  {
+    value: 3600,
+    label: "1 hour",
+  },
+  {
+    value: 86400,
+    label: "24 hours",
+  },
+];
+
 function SelfDestructSelector({
   messageId,
   onUpdated,
 }) {
-  const [duration, setDuration] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [duration, setDuration] =
+    useState("");
 
-  const handleChange = async (e) => {
-    const value = e.target.value;
+  const [loading, setLoading] =
+    useState(false);
+
+  const handleChange = async (event) => {
+    const value = event.target.value;
 
     setDuration(value);
 
@@ -20,30 +46,34 @@ function SelfDestructSelector({
     try {
       setLoading(true);
 
-      const expiresAt = new Date(
-        Date.now() + Number(value) * 1000
-      ).toISOString();
-
       const response = await api.put(
-        `/messages/${messageId}/self-destruct`,
+        `/messages/self-destruct/${messageId}`,
         {
-          expiresAt,
+          expiresIn: Number(value),
         }
       );
 
-      if (onUpdated) {
-        onUpdated(response.data);
-      }
+      const updated =
+        response.data?.data || response.data;
+
+      onUpdated?.({
+        ...updated,
+        expiresAt: updated.expiresAt,
+        isSelfDestruct:
+          updated.isSelfDestruct,
+      });
     } catch (error) {
       console.error(
-        "Self destruct error:",
+        "Self-destruct error:",
         error
       );
 
       alert(
-        error?.response?.data?.message ||
-          "Failed to set self-destruct."
+        error.response?.data?.message ||
+          "Failed to enable self-destruct."
       );
+
+      setDuration("");
     } finally {
       setLoading(false);
     }
@@ -61,29 +91,14 @@ function SelfDestructSelector({
         💣 Self-destruct
       </option>
 
-      <option value="10">
-        10 seconds
-      </option>
-
-      <option value="30">
-        30 seconds
-      </option>
-
-      <option value="60">
-        1 minute
-      </option>
-
-      <option value="300">
-        5 minutes
-      </option>
-
-      <option value="3600">
-        1 hour
-      </option>
-
-      <option value="86400">
-        24 hours
-      </option>
+      {DURATIONS.map((item) => (
+        <option
+          key={item.value}
+          value={item.value}
+        >
+          {item.label}
+        </option>
+      ))}
     </select>
   );
 }

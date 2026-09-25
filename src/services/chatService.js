@@ -21,22 +21,67 @@ export const sendMessage = async ({
   receiverId,
   conversationId,
   text,
-  imageFile,
+  file,
   audio,
   expiresIn,
+  messageType,
 }) => {
   const formData = new FormData();
 
-  if (receiverId) formData.append("receiverId", receiverId);
-  if (conversationId) formData.append("conversationId", conversationId);
+  if (receiverId) {
+    formData.append(
+      "receiverId",
+      receiverId
+    );
+  }
 
-  if (text) formData.append("text", text);
-  if (audio) formData.append("audio", audio);
-  if (expiresIn) formData.append("expiresIn", String(expiresIn));
-  if (imageFile) formData.append("image", imageFile);
+  if (conversationId) {
+    formData.append(
+      "conversationId",
+      conversationId
+    );
+  }
 
-  const res = await api.post("/messages/send", formData);
-  return res.data.data;
+  if (text?.trim()) {
+    formData.append(
+      "text",
+      text.trim()
+    );
+  }
+
+  if (file) {
+    formData.append("file", file);
+  }
+
+  if (audio) {
+    formData.append("audio", audio);
+  }
+
+  if (expiresIn) {
+    formData.append(
+      "expiresIn",
+      String(expiresIn)
+    );
+  }
+
+  if (messageType) {
+    formData.append(
+      "messageType",
+      messageType
+    );
+  }
+
+  const response = await api.post(
+    "/messages/send",
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+
+  return response.data.data;
 };
 
 export const markMessagesRead = async (conversationId) => {
