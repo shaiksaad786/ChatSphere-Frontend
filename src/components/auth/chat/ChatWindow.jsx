@@ -23,7 +23,7 @@ function ChatWindow({
   onForwardMessage,
   isGroup = false,
 }) {
-  const { t } = usePreferences();
+  const { t, language } = usePreferences();
 
   const bottomRef = useRef(null);
 
@@ -623,7 +623,6 @@ function MessageContent({ message }) {
                 message.content ||
                 ""
               }
-              targetLanguage="te"
             />
           )}
         </>
