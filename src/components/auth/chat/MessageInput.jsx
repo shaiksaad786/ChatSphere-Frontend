@@ -66,9 +66,7 @@ function MessageInput({
 
         text: text.trim(),
 
-        file: file || undefined,
-
-        audio: audioFile || undefined,
+        file: file || audioFile || undefined,
 
         expiresIn:
           expiresIn || undefined,
@@ -100,29 +98,64 @@ function MessageInput({
 };
 
   const schedule = async () => {
-    if (conversation?.isGroup) { alert("Scheduled group messages are not supported by the current backend."); return; }
-    if (!text.trim() || !scheduledAt || !conversation?._id || !other?._id) {
-      alert("Enter message and future date/time.");
-      return;
-    }
+  if (
+    !text.trim() ||
+    !scheduledAt ||
+    !conversation?._id ||
+    (!conversation.isGroup && !other?._id)
+  ) {
+    alert(
+      "Enter message and future date/time."
+    );
+    return;
+  }
 
-    try {
-      await scheduleMessage({
-        conversationId: conversation._id,
-        receiverId: other?._id,
-        text: text.trim(),
-        scheduledAt: new Date(scheduledAt).toISOString(),
-        messageType: "text",
-      });
+  const selectedTime = new Date(
+    scheduledAt
+  );
 
-      alert("Message scheduled successfully.");
-      setText("");
-      setScheduledAt("");
-      setShowSchedule(false);
-    } catch (error) {
-      alert(error.response?.data?.message || "Failed to schedule message");
-    }
-  };
+  if (
+    Number.isNaN(selectedTime.getTime()) ||
+    selectedTime <= new Date()
+  ) {
+    alert(
+      "Scheduled time must be in the future."
+    );
+    return;
+  }
+
+  try {
+    await scheduleMessage({
+      conversationId:
+        conversation._id,
+
+      receiverId:
+        conversation.isGroup
+          ? undefined
+          : other?._id,
+
+      text: text.trim(),
+
+      scheduledAt:
+        selectedTime.toISOString(),
+
+      messageType: "text",
+    });
+
+    alert(
+      "Message scheduled successfully."
+    );
+
+    setText("");
+    setScheduledAt("");
+    setShowSchedule(false);
+  } catch (error) {
+    alert(
+      error.response?.data?.message ||
+        "Failed to schedule message"
+    );
+  }
+};
   const typingTimerRef = useRef(null);
   const handleTyping = (value) => {
   setText(value);
@@ -162,6 +195,15 @@ function MessageInput({
     }
   }, 1000);
 };
+  useEffect(() => {
+    const handleUseReply = (event) => {
+      const reply = String(event.detail || "");
+      if (reply.trim()) setText(reply);
+    };
+    window.addEventListener("chatsphere-use-reply", handleUseReply);
+    return () => window.removeEventListener("chatsphere-use-reply", handleUseReply);
+  }, []);
+
   useEffect(() => {
   return () => {
     if (typingTimerRef.current) {
@@ -235,11 +277,16 @@ function MessageInput({
         text/plain
       "
       hidden
-      onChange={(e) =>
-        setFile(
-          e.target.files?.[0] || null
-        )
-      }
+      onChange={(e) => {
+      const selectedFile = e.target.files?.[0] || null;
+
+      console.log("Selected file:", selectedFile);
+      console.log("File name:", selectedFile?.name);
+      console.log("File type:", selectedFile?.type);
+      console.log("File size:", selectedFile?.size);
+
+      setFile(selectedFile);
+    }}
     />
   </label>
 
@@ -253,9 +300,6 @@ function MessageInput({
           >
             💣 Self-destruct {expiresIn ? "(30s)" : ""}
           </button>
-
-          <VoiceRecorder onRecordingComplete={(audio) => setAudioFile(audio)} />
-          {audioFile && <span className="px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm">🎤 {audioFile.name}</span>}
 
           <button
             onClick={() => setShowSchedule(!showSchedule)}
@@ -311,6 +355,8 @@ function MessageInput({
         >
           ✨
         </button>
+
+        <VoiceRecorder onRecordingComplete={(audio) => setAudioFile(audio)} />
 
         <button
           onClick={send}

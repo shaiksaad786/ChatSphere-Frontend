@@ -71,15 +71,8 @@ export const sendMessage = async ({
     );
   }
 
-  const response = await api.post(
-    "/messages/send",
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }
-  );
+  // Let Axios/browser set the multipart boundary automatically.
+  const response = await api.post("/messages/send", formData);
 
   return response.data.data;
 };
@@ -148,4 +141,9 @@ export const uploadMedia = async (files) => {
 
   const res = await api.post("/media/upload", formData);
   return res.data.data || [];
+};
+
+export const forwardMessage = async (messageId, conversationId) => {
+  const res = await api.post(`/messages/forward/${messageId}`, { conversationId });
+  return res.data.data;
 };

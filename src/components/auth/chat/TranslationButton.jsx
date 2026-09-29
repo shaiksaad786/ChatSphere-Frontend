@@ -1,23 +1,20 @@
 import { useState } from "react";
 import { translateText } from "../../../services/translationService";
+import { usePreferences } from "../../../context/AppPreferences";
 
-const LANGUAGES = [
-  { code: "en", name: "English" },
-  { code: "te", name: "Telugu" },
-  { code: "hi", name: "Hindi" },
-  { code: "ta", name: "Tamil" },
-  { code: "kn", name: "Kannada" },
-  { code: "ml", name: "Malayalam" },
-  { code: "bn", name: "Bengali" },
-];
+const LANGUAGE_CODES = {
+  english: "en",
+  telugu: "te",
+  hindi: "hi",
+};
 
-function TranslationButton({
-  text,
-  targetLanguage = "te",
-}) {
+function TranslationButton({ text }) {
+  const { language, t } = usePreferences();
   const [translated, setTranslated] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const targetLanguage = LANGUAGE_CODES[language] || "en";
 
   const handleTranslate = async () => {
     if (!text?.trim()) return;
@@ -27,15 +24,13 @@ function TranslationButton({
 
     try {
       const result = await translateText({
-        text,
+        text: text.trim(),
         source: "auto",
         target: targetLanguage,
       });
-
       setTranslated(result);
     } catch (error) {
       console.error("Translation failed:", error);
-
       setError(
         error.response?.data?.message ||
           error.message ||
@@ -48,42 +43,32 @@ function TranslationButton({
 
   return (
     <div className="mt-2">
-      {!translated && (
+      {!translated ? (
         <button
           type="button"
           onClick={handleTranslate}
           disabled={loading}
-          className="text-xs underline opacity-80 hover:opacity-100 disabled:opacity-50"
+          className="rounded-md border border-current/30 px-2 py-1 text-xs font-medium opacity-90 hover:bg-black/10 disabled:opacity-50"
         >
-          {loading ? "Translating..." : "Translate"}
+          {loading ? "Translating..." : `${t("translate")} → ${language}`}
         </button>
-      )}
-
-      {error && (
-        <p className="text-xs text-red-500 mt-1">
-          {error}
-        </p>
-      )}
-
-      {translated && (
-        <div className="mt-2 pt-2 border-t border-gray-200/50">
-          <p className="text-[11px] opacity-60 mb-1">
-            Translation
+      ) : (
+        <div className="mt-2 border-t border-current/20 pt-2">
+          <p className="mb-1 text-[11px] font-medium opacity-70">
+            {t("translate")} ({language})
           </p>
-
-          <p className="text-sm whitespace-pre-wrap">
-            {translated}
-          </p>
-
+          <p className="whitespace-pre-wrap text-sm">{translated}</p>
           <button
             type="button"
             onClick={() => setTranslated("")}
-            className="text-xs underline mt-1 opacity-70"
+            className="mt-1 text-xs underline opacity-70"
           >
             Show original
           </button>
         </div>
       )}
+
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }

@@ -60,7 +60,7 @@ export const deleteMessage = async (
 };
 export const getUnreadMessageCount = async () => {
   const response = await api.get('/messages/unread-count');
-  return response.data.unreadCount || 0;
+  return response.data;
 };
 
 export const rescheduleMessage = async (messageId, scheduledAt) => {

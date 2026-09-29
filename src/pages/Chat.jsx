@@ -16,6 +16,7 @@ import PollModal from "../components/auth/features/PollModal";
 import ToolsPanel from "../components/auth/features/ToolsPanel";
 import GroupManager from "../components/auth/chat/GroupManager";
 import CallManager from "../components/auth/chat/callManager";
+import ForwardModal from "../components/auth/chat/ForwardModal";
 import {
   getConversations,
   getMessages,
@@ -25,6 +26,7 @@ import {
 import {
   deleteMessage,
 } from "../services/messageService";
+import { forwardMessage } from "../services/chatService";
 
 import {
   connectSocket,
@@ -79,7 +81,10 @@ function Chat() {
 
   const [selectedMessageIds, setSelectedMessageIds] =
     useState([]);
-
+  const [forwardingMessage, setForwardingMessage] = useState(null);
+  const handleForwardMessage = (message) => {
+      setForwardingMessage(message);
+    };
   const currentUserId =
     getCurrentUserId();
 
@@ -90,6 +95,23 @@ function Chat() {
     async (conversation) => {
       setSelected(conversation);
 
+      // Seed presence immediately from the conversation payload so status
+      // does not stay blank until the next socket event.
+      if (conversation?.participants) {
+        setUserPresence((prev) => {
+          const next = { ...prev };
+          conversation.participants.forEach((participant) => {
+            if (String(participant._id) === String(currentUserId)) return;
+            next[String(participant._id)] = {
+              status: participant.status || "offline",
+              lastSeen: participant.lastSeen || null,
+            };
+          });
+          return next;
+        });
+      }
+
+      setTyping(false);
       setAiOpen(false);
       setToolsOpen(false);
 
@@ -111,6 +133,16 @@ function Chat() {
             ? data
             : []
         );
+
+        if (Array.isArray(data)) {
+          data.forEach((message) => {
+            const senderId = message.sender?._id || message.sender;
+            if (message?._id && String(senderId) !== String(currentUserId)) {
+              const socket = connectSocket();
+              socket?.emit("messageDelivered", message._id);
+            }
+          });
+        }
 
         await markMessagesRead(
           conversation._id
@@ -209,6 +241,11 @@ function Chat() {
           message.conversation ||
           message.conversationId;
 
+        // Persist delivery even when the incoming conversation is not open.
+        if (message?._id) {
+          socket.emit("messageDelivered", message._id);
+        }
+
         if (
           selected &&
           String(
@@ -232,6 +269,7 @@ function Chat() {
               message,
             ];
           });
+
         }
 
         refreshConversations();
@@ -304,6 +342,7 @@ function Chat() {
 
         refreshConversations();
       };
+    
 
     /*
      * Message deleted
@@ -620,51 +659,108 @@ function Chat() {
 
   const otherPresence =
     otherParticipant
-      ? userPresence[
-          String(
-            otherParticipant._id
-          )
-        ]
+      ? userPresence[String(otherParticipant._id)] || {
+          status: otherParticipant.status || "offline",
+          lastSeen: otherParticipant.lastSeen || null,
+        }
       : null;
 
-  const online =
-    otherPresence?.status ===
-    "online";
+  const online = otherPresence?.status === "online";
   const handleVoiceCall = () => {
-    if (!selected || selected.isGroup) {
+    if (!selected) {
       return;
     }
-  
+
+    // GROUP CALL
+    if (selected.isGroup) {
+      const participantIds =
+        selected.participants
+          ?.filter(
+            (participant) =>
+              String(participant._id) !==
+              String(currentUserId)
+          )
+          .map((participant) =>
+            String(participant._id)
+          ) || [];
+
+      if (participantIds.length === 0) {
+        alert("No other group members are available.");
+        return;
+      }
+
+      setCallRequest({
+        type: "voice",
+        isGroup: true,
+        participantIds,
+        conversationId: selected._id,
+      });
+
+      return;
+    }
+
+    // ONE-TO-ONE CALL
     const receiverId =
       otherParticipant?._id;
-  
+
     if (!receiverId) {
       alert("Unable to identify the user.");
       return;
     }
-  
+
     setCallRequest({
       type: "voice",
+      isGroup: false,
       receiverId,
       conversationId: selected._id,
     });
   };
   
   const handleVideoCall = () => {
-    if (!selected || selected.isGroup) {
+    if (!selected) {
       return;
     }
-  
+
+    // GROUP CALL
+    if (selected.isGroup) {
+      const participantIds =
+        selected.participants
+          ?.filter(
+            (participant) =>
+              String(participant._id) !==
+              String(currentUserId)
+          )
+          .map((participant) =>
+            String(participant._id)
+          ) || [];
+
+      if (participantIds.length === 0) {
+        alert("No other group members are available.");
+        return;
+      }
+
+      setCallRequest({
+        type: "video",
+        isGroup: true,
+        participantIds,
+        conversationId: selected._id,
+      });
+
+      return;
+    }
+
+    // ONE-TO-ONE CALL
     const receiverId =
       otherParticipant?._id;
-  
+
     if (!receiverId) {
       alert("Unable to identify the user.");
       return;
     }
-  
+
     setCallRequest({
       type: "video",
+      isGroup: false,
       receiverId,
       conversationId: selected._id,
     });
@@ -914,6 +1010,7 @@ function Chat() {
           lastSeen={
             otherPresence?.lastSeen
           }
+          typing={typing}
           onGroupManage={() =>
             setGroupManagerOpen(
               true
@@ -944,6 +1041,7 @@ function Chat() {
             currentUserId={
               currentUserId
             }
+            isGroup={selected?.isGroup || false}
             searchQuery={
               messageSearch
             }
@@ -962,14 +1060,8 @@ function Chat() {
             onCancelSelection={
               cancelMessageSelection
             }
+            onForwardMessage={handleForwardMessage}
           />
-        )}
-
-        {/* Typing */}
-        {typing && (
-          <div className="bg-white px-5 py-1 text-xs text-gray-500">
-            {t("someoneTyping")}
-          </div>
         )}
 
         {/* Feature buttons */}
@@ -1023,9 +1115,13 @@ function Chat() {
         currentUserId={currentUserId}
         requestCall={
           callRequest
-            ? callRequest.type === "voice"
-              ? "audio"
-              : "video"
+            ? {
+                ...callRequest,
+                type:
+                  callRequest.type === "voice"
+                    ? "audio"
+                    : "video",
+              }
             : null
         }
         onRequestHandled={() =>
@@ -1104,6 +1200,24 @@ function Chat() {
             }}
           />
         )}
+
+      {forwardingMessage && (
+        <ForwardModal
+          message={forwardingMessage}
+          conversations={conversations}
+          currentUserId={currentUserId}
+          onClose={() => setForwardingMessage(null)}
+          onForward={async (targetConversation) => {
+            try {
+              await forwardMessage(forwardingMessage._id, targetConversation._id);
+              await loadConversations();
+            } catch (error) {
+              alert(error.response?.data?.message || "Failed to forward message");
+              throw error;
+            }
+          }}
+        />
+      )}
 
       {/* Poll */}
       {pollOpen &&

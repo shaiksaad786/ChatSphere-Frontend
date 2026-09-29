@@ -237,8 +237,19 @@ export default function ToolsPanel({
 
                 <p className="text-xs mt-2">
                   Status:{" "}
-                  <span className="font-semibold">
-                    {status}
+                  <span
+                    className={`font-semibold ${
+                      status === "pending"
+                        ? "text-orange-600"
+                        : status === "sent"
+                        ? "text-green-600"
+                        : status === "failed"
+                        ? "text-red-600"
+                        : "text-gray-600"
+                    }`}
+                  >
+                    {status.charAt(0).toUpperCase() +
+                      status.slice(1)}
                   </span>
                 </p>
 
@@ -296,7 +307,7 @@ export default function ToolsPanel({
           tab === "scheduled" &&
           !scheduled.length && (
             <p className="text-sm text-gray-500">
-              No pending scheduled messages.
+              No scheduled messages.
             </p>
           )}
       </div>

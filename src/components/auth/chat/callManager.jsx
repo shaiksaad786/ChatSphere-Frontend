@@ -36,11 +36,13 @@ function CallManager({
 }) {
   const [call, setCall] = useState(null);
   const [error, setError] = useState("");
-
+  const [groupRemoteStreams, setGroupRemoteStreams] =
+  useState([]);
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
-
+  const groupPeersRef = useRef(new Map());
+  const groupPendingIceRef = useRef(new Map());
   const callRef = useRef(null);
   const pendingIceRef = useRef([]);
 
@@ -53,6 +55,22 @@ function CallManager({
   // --------------------------------------------------
 
   const cleanupMedia = () => {
+    // Close all group-call peer connections
+    groupPeersRef.current.forEach((peer) => {
+      try {
+        peer.close();
+      } catch (error) {
+        console.error(
+          "Group peer cleanup error:",
+          error
+        );
+      }
+    });
+
+    groupPeersRef.current.clear();
+    groupPendingIceRef.current.clear();
+
+    setGroupRemoteStreams([]);
     peerRef.current?.close();
     peerRef.current = null;
 
@@ -234,22 +252,249 @@ function CallManager({
 
     return peer;
   };
+  // --------------------------------------------------
+  // CREATE GROUP WEBRTC PEER
+  // --------------------------------------------------
 
+  const createGroupPeer = async ({
+    participantId,
+    callType,
+    callId,
+    createOffer = false,
+  }) => {
+    const socket =
+      getSocket() || connectSocket();
+
+    if (!socket) {
+      throw new Error(
+        "Call connection is not available."
+      );
+    }
+
+    const peer =
+      new RTCPeerConnection({
+        iceServers: [
+          {
+            urls:
+              "stun:stun.l.google.com:19302",
+          },
+          {
+            urls:
+              "stun:stun1.l.google.com:19302",
+          },
+        ],
+      });
+
+    const participantKey =
+      String(participantId);
+
+    groupPeersRef.current.set(
+      participantKey,
+      peer
+    );
+
+    peer.onicecandidate = (event) => {
+      if (!event.candidate) return;
+
+      socket.emit("groupIceCandidate", {
+        receiverId: participantKey,
+        senderId: String(currentUserId),
+        callId,
+        candidate: event.candidate,
+      });
+    };
+
+    peer.ontrack = (event) => {
+      const [stream] = event.streams;
+
+      if (!stream) return;
+
+      setGroupRemoteStreams((prev) => {
+        const existing = prev.find(
+          (item) =>
+            String(item.participantId) ===
+            participantKey
+        );
+
+        if (existing) {
+          return prev.map((item) =>
+            String(item.participantId) ===
+            participantKey
+              ? {
+                  ...item,
+                  stream,
+                }
+              : item
+          );
+        }
+
+        return [
+          ...prev,
+          {
+            participantId:
+              participantKey,
+            stream,
+          },
+        ];
+      });
+    };
+
+    peer.onconnectionstatechange = () => {
+      if (
+        ["failed", "disconnected", "closed"].includes(
+          peer.connectionState
+        )
+      ) {
+        groupPeersRef.current.delete(
+          participantKey
+        );
+
+        setGroupRemoteStreams((prev) =>
+          prev.filter(
+            (item) =>
+              String(item.participantId) !==
+              participantKey
+          )
+        );
+      }
+    };
+
+    // Get microphone/camera only once.
+    if (!localStreamRef.current) {
+      const media =
+        await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: callType === "video",
+        });
+
+      localStreamRef.current = media;
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject =
+          media;
+      }
+    }
+
+    localStreamRef.current
+      .getTracks()
+      .forEach((track) => {
+        peer.addTrack(
+          track,
+          localStreamRef.current
+        );
+      });
+
+    // Caller creates an offer for this participant.
+    if (createOffer) {
+      const offer =
+        await peer.createOffer();
+
+      await peer.setLocalDescription(
+        offer
+      );
+
+      socket.emit("groupWebrtcOffer", {
+        receiverId: participantKey,
+        senderId: String(currentUserId),
+        callId,
+        offer,
+      });
+    }
+
+    return peer;
+  };
   // --------------------------------------------------
   // START OUTGOING CALL
   // --------------------------------------------------
 
-  const startCall = async (callType) => {
+  const startCall = async (request) => {
     if (!conversation) return;
 
-    // Backend calling implementation is
-    // currently direct-user calling.
-    if (conversation.isGroup) {
+    const callType =
+      typeof request === "string"
+        ? request
+        : request?.type;
+
+    const requestedReceiverId =
+      typeof request === "object"
+        ? request?.receiverId
+        : null;
+
+    if (callRef.current) return;
+
+    const socket =
+      getSocket() || connectSocket();
+
+    if (!socket) {
       setError(
-        "Voice and video calls are available for direct chats only."
+        "Call connection is not available."
       );
       return;
     }
+
+    // ==================================================
+    // GROUP CALL
+    // ==================================================
+    if (conversation.isGroup) {
+      const participantIds =
+        conversation.participants
+          ?.filter(
+            (participant) =>
+              String(participant._id) !==
+              String(currentUserId)
+          )
+          .map((participant) =>
+            String(participant._id)
+          ) || [];
+
+      if (participantIds.length === 0) {
+        setError(
+          "No other group members are available."
+        );
+        return;
+      }
+
+      const callId = makeCallId();
+
+      const activeCall = {
+        callId,
+        callerId:
+          String(currentUserId),
+        receiverId: null,
+        participantIds,
+        callType,
+        role: "caller",
+        isGroup: true,
+        status: "calling",
+      };
+
+      callRef.current = activeCall;
+
+      setCall({
+        ...activeCall,
+        name:
+          conversation.name ||
+          "Group call",
+      });
+
+      setError("");
+
+      socket.emit("groupCallStart", {
+        conversationId:
+          conversation._id,
+        callId,
+        callerId:
+          String(currentUserId),
+        callType,
+        participantIds,
+      });
+
+      return;
+    }
+
+    // ==================================================
+    // DIRECT CALL
+    // ==================================================
 
     const other =
       getOtherParticipant(
@@ -264,18 +509,6 @@ function CallManager({
       return;
     }
 
-    if (callRef.current) return;
-
-    const socket =
-      getSocket() || connectSocket();
-
-    if (!socket) {
-      setError(
-        "Call connection is not available."
-      );
-      return;
-    }
-
     const callId = makeCallId();
 
     const receiverId =
@@ -284,11 +517,12 @@ function CallManager({
     setError("");
 
     try {
-      const peer = await createPeer({
-        callType,
-        receiverId,
-        callId,
-      });
+      const peer =
+        await createPeer({
+          callType,
+          receiverId,
+          callId,
+        });
 
       const offer =
         await peer.createOffer();
@@ -306,7 +540,8 @@ function CallManager({
         role: "caller",
       };
 
-      callRef.current = activeCall;
+      callRef.current =
+        activeCall;
 
       setCall({
         ...activeCall,
@@ -314,8 +549,6 @@ function CallManager({
         name: other.name,
       });
 
-      // Backend:
-      // socket.on("callUser", ...)
       socket.emit("callUser", {
         receiverId,
         callId,
@@ -341,10 +574,103 @@ function CallManager({
   // --------------------------------------------------
   // ACCEPT INCOMING CALL
   // --------------------------------------------------
+  const acceptGroupCall = async () => {
+    const incoming =
+      callRef.current;
 
+    if (!incoming?.isGroup) return;
+
+    const socket =
+      getSocket() || connectSocket();
+
+    if (!socket) {
+      setError(
+        "Call connection is not available."
+      );
+      return;
+    }
+
+    try {
+      const media =
+        await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video:
+            incoming.callType === "video",
+        });
+
+      localStreamRef.current =
+        media;
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject =
+          media;
+      }
+
+      socket.emit(
+        "groupCallAccept",
+        {
+          conversationId:
+            conversation?._id,
+          callId:
+            incoming.callId,
+          callerId:
+            incoming.callerId,
+          callType:
+            incoming.callType,
+          participantIds:
+            incoming.participantIds || [],
+        }
+      );
+
+      const nextCall = {
+        ...incoming,
+        role: "receiver",
+        status: "connected",
+        isGroup: true,
+      };
+
+      callRef.current =
+        nextCall;
+
+      setCall(nextCall);
+      setError("");
+    } catch (error) {
+      console.error(
+        "Accept group call error:",
+        error
+      );
+
+      cleanupMedia();
+
+      socket.emit(
+        "groupCallReject",
+        {
+          conversationId:
+            conversation?._id,
+          callId:
+            incoming.callId,
+          callerId:
+            incoming.callerId,
+        }
+      );
+
+      callRef.current = null;
+      setCall(null);
+
+      setError(
+        "Could not access your microphone/camera."
+      );
+    }
+  };
   const acceptCall = async () => {
     const incoming =
       callRef.current;
+
+    if (
+      incoming?.isGroup
+    ) {
+      return acceptGroupCall();
+    }
 
     if (!incoming?.offer) return;
 
@@ -770,6 +1096,386 @@ function CallManager({
       "incomingCall",
       handleIncomingCall
     );
+    const handleGroupIncomingCall = (data) => {
+      if (!data) return;
+
+      const {
+        conversationId,
+        callId,
+        callerId,
+        callType,
+        participantIds,
+      } = data;
+    
+      if (
+        String(conversation?._id) !==
+        String(conversationId)
+      ) {
+        return;
+      }
+    
+      if (
+        !Array.isArray(participantIds) ||
+        participantIds.length === 0
+      ) {
+        return;
+      }
+    
+      callRef.current = {
+        callId,
+        callerId:
+          String(callerId),
+        receiverId: null,
+        participantIds:
+          participantIds.map((id) =>
+            String(id)
+          ),
+        callType,
+        role: "receiver",
+        isGroup: true,
+        status: "incoming",
+      };
+    
+      setCall({
+        ...callRef.current,
+        status: "incoming",
+        name:
+          conversation?.name ||
+          "Incoming group call",
+      });
+    
+      setError("");
+    };
+    const handleGroupCallAccepted = async (data) => {
+      if (!data) return;
+
+      const {
+        conversationId,
+        callId,
+        receiverId,
+        callType,
+      } = data;
+    
+      if (
+        String(conversation?._id) !==
+        String(conversationId)
+      ) {
+        return;
+      }
+    
+      const activeCall =
+        callRef.current;
+    
+      if (
+        !activeCall ||
+        String(activeCall.callId) !==
+          String(callId)
+      ) {
+        return;
+      }
+    
+      const participantId =
+        String(receiverId);
+    
+      // Don't create a peer connection to ourselves.
+      if (
+        participantId ===
+        String(currentUserId)
+      ) {
+        return;
+      }
+    
+      // Don't create duplicate peer connections.
+      if (
+        groupPeersRef.current.has(
+          participantId
+        )
+      ) {
+        return;
+      }
+    
+      try {
+        await createGroupPeer({
+          participantId,
+          callType:
+            callType ||
+            activeCall.callType,
+          callId,
+          createOffer: true,
+        });
+      
+        setCall((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "connected",
+                isGroup: true,
+              }
+            : prev
+        );
+      } catch (error) {
+        console.error(
+          "Group peer creation error:",
+          error
+        );
+      
+        setError(
+          "Unable to connect to the group call."
+        );
+      }
+    };
+    const handleGroupWebrtcOffer = async (data) => {
+      if (!data) return;
+
+      const {
+        conversationId,
+        callId,
+        senderId,
+        offer,
+      } = data;
+    
+      if (
+        String(conversation?._id) !==
+        String(conversationId)
+      ) {
+        return;
+      }
+    
+      const activeCall =
+        callRef.current;
+    
+      if (
+        !activeCall ||
+        String(activeCall.callId) !==
+          String(callId) ||
+        !activeCall.isGroup
+      ) {
+        return;
+      }
+    
+      const participantId =
+        String(senderId);
+    
+      try {
+        let peer =
+          groupPeersRef.current.get(
+            participantId
+          );
+        
+        // Create a peer if this is the
+        // first offer from this participant.
+        if (!peer) {
+          peer = await createGroupPeer({
+            participantId,
+            callType:
+              activeCall.callType,
+            callId,
+            createOffer: false,
+          });
+        }
+      
+        await peer.setRemoteDescription(
+          offer
+        );
+      
+        const pendingCandidates =
+          groupPendingIceRef.current.get(
+            participantId
+          ) || [];
+        
+        for (const candidate of pendingCandidates) {
+          try {
+            await peer.addIceCandidate(
+              candidate
+            );
+          } catch (error) {
+            console.error(
+              "Group pending ICE error:",
+              error
+            );
+          }
+        }
+      
+        groupPendingIceRef.current.delete(
+          participantId
+        );
+      
+        const answer =
+          await peer.createAnswer();
+      
+        await peer.setLocalDescription(
+          answer
+        );
+      
+        const socket =
+          getSocket() || connectSocket();
+      
+        if (!socket) return;
+      
+        socket.emit(
+          "groupWebrtcAnswer",
+          {
+            receiverId:
+              participantId,
+            senderId:
+              String(currentUserId),
+            callId,
+            answer,
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Group WebRTC offer error:",
+          error
+        );
+      }
+    };
+    const handleGroupWebrtcAnswer = async (data) => {
+      if (!data) return;
+
+      const {
+        conversationId,
+        callId,
+        senderId,
+        answer,
+      } = data;
+    
+      if (
+        String(conversation?._id) !==
+        String(conversationId)
+      ) {
+        return;
+      }
+    
+      const activeCall =
+        callRef.current;
+    
+      if (
+        !activeCall ||
+        String(activeCall.callId) !==
+          String(callId) ||
+        !activeCall.isGroup
+      ) {
+        return;
+      }
+    
+      const participantId =
+        String(senderId);
+    
+      const peer =
+        groupPeersRef.current.get(
+          participantId
+        );
+      
+      if (!peer) {
+        console.warn(
+          "Group peer not found for answer:",
+          participantId
+        );
+        return;
+      }
+    
+      try {
+        await peer.setRemoteDescription(
+          answer
+        );
+      } catch (error) {
+        console.error(
+          "Group WebRTC answer error:",
+          error
+        );
+      }
+    };
+    const handleGroupIceCandidate = async (data) => {
+      if (!data) return;
+
+      const {
+        callId,
+        senderId,
+        candidate,
+      } = data;
+    
+      if (!callId || !senderId || !candidate) {
+        return;
+      }
+    
+      const activeCall = callRef.current;
+    
+      if (
+        !activeCall ||
+        String(activeCall.callId) !==
+          String(callId) ||
+        !activeCall.isGroup
+      ) {
+        return;
+      }
+    
+      const participantId =
+        String(senderId);
+    
+      const peer =
+        groupPeersRef.current.get(
+          participantId
+        );
+      
+      // Peer may not exist yet because the
+      // ICE candidate can arrive before the
+      // WebRTC offer.
+      if (!peer) {
+        const pending =
+          groupPendingIceRef.current.get(
+            participantId
+          ) || [];
+        
+        pending.push(candidate);
+        
+        groupPendingIceRef.current.set(
+          participantId,
+          pending
+        );
+      
+        return;
+      }
+    
+      try {
+        // If remote description is not ready yet,
+        // store the candidate temporarily.
+        if (!peer.remoteDescription) {
+          const pending =
+            groupPendingIceRef.current.get(
+              participantId
+            ) || [];
+          
+          pending.push(candidate);
+          
+          groupPendingIceRef.current.set(
+            participantId,
+            pending
+          );
+        
+          return;
+        }
+      
+        await peer.addIceCandidate(
+          candidate
+        );
+      } catch (error) {
+        console.error(
+          "Group ICE candidate error:",
+          error
+        );
+      }
+    };
+
+    socket.on(
+      "groupIncomingCall",
+      handleGroupIncomingCall
+    );
+
+    socket.on(
+      "groupCallAccepted",
+      handleGroupCallAccepted
+    );
 
     socket.on(
       "callAccepted",
@@ -805,16 +1511,36 @@ function CallManager({
       "webrtcOffer",
       handleOffer
     );
+    socket.on(
+      "groupWebrtcOffer",
+      handleGroupWebrtcOffer
+    );
 
     socket.on(
       "webrtcAnswer",
       handleAnswer
+    );
+    socket.on(
+      "groupWebrtcAnswer",
+      handleGroupWebrtcAnswer
+    );
+    socket.on(
+      "groupIceCandidate",
+      handleGroupIceCandidate
     );
 
     return () => {
       socket.off(
         "incomingCall",
         handleIncomingCall
+      );
+      socket.off(
+        "groupIncomingCall",
+        handleGroupIncomingCall
+      );
+      socket.off(
+        "groupCallAccepted",
+        handleGroupCallAccepted
       );
 
       socket.off(
@@ -851,10 +1577,22 @@ function CallManager({
         "webrtcOffer",
         handleOffer
       );
+      socket.off(
+        "groupWebrtcOffer",
+        handleGroupWebrtcOffer
+      );
 
       socket.off(
         "webrtcAnswer",
         handleAnswer
+      );
+      socket.off(
+        "groupWebrtcAnswer",
+        handleGroupWebrtcAnswer
+      );
+      socket.off(
+        "groupIceCandidate",
+        handleGroupIceCandidate
       );
     };
   }, []);
@@ -987,41 +1725,104 @@ function CallManager({
               <div className="relative aspect-video bg-black">
 
                 {/* VIDEO CALL */}
-                {call.callType ===
-                "video" ? (
+                {call.callType === "video" ? (
                   <>
-                    <video
-                      ref={
-                        remoteVideoRef
-                      }
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-
-                    <video
-                      ref={
-                        localVideoRef
-                      }
-                      autoPlay
-                      muted
-                      playsInline
-                      className="absolute right-4 bottom-4 w-32 h-24 rounded-xl object-cover border border-white/30 bg-black"
-                    />
+                    {call.isGroup ? (
+                      <div className="grid h-full w-full grid-cols-1 gap-2 bg-black p-2 sm:grid-cols-2">
+                        {groupRemoteStreams.length > 0 ? (
+                          groupRemoteStreams.map((item) => (
+                            <video
+                              key={item.participantId}
+                              autoPlay
+                              playsInline
+                              ref={(element) => {
+                                if (element && item.stream) {
+                                  element.srcObject =
+                                    item.stream;
+                                }
+                              }}
+                              className="h-full min-h-[180px] w-full rounded-xl bg-gray-800 object-cover"
+                            />
+                          ))
+                        ) : (
+                          <div className="col-span-full flex items-center justify-center text-gray-400">
+                            Waiting for other participants...
+                          </div>
+                        )}
+                
+                        {/* Local video */}
+                        <video
+                          ref={localVideoRef}
+                          autoPlay
+                          muted
+                          playsInline
+                          className="absolute bottom-4 right-4 h-24 w-32 rounded-xl border border-white/30 bg-black object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <video
+                          ref={remoteVideoRef}
+                          autoPlay
+                          playsInline
+                          className="h-full w-full object-cover"
+                        />
+                
+                        <video
+                          ref={localVideoRef}
+                          autoPlay
+                          muted
+                          playsInline
+                          className="absolute bottom-4 right-4 h-24 w-32 rounded-xl border border-white/30 bg-black object-cover"
+                        />
+                      </>
+                    )}
                   </>
                 ) : (
                   /* VOICE CALL */
                   <div className="h-full flex flex-col items-center justify-center gap-4">
-                    <div className="w-24 h-24 rounded-full bg-indigo-600 flex items-center justify-center text-4xl">
-                      📞
-                    </div>
-
-                    <audio
-                      ref={
-                        remoteAudioRef
-                      }
-                      autoPlay
-                    />
+                    {call.isGroup ? (
+                      <>
+                        <div className="text-6xl">
+                          👥
+                        </div>
+                    
+                        <p className="text-lg font-semibold">
+                          Group voice call
+                        </p>
+                    
+                        <p className="text-sm text-gray-400">
+                          {groupRemoteStreams.length} participant
+                          {groupRemoteStreams.length === 1
+                            ? ""
+                            : "s"} connected
+                        </p>
+                          
+                        {groupRemoteStreams.map((item) => (
+                          <audio
+                            key={item.participantId}
+                            autoPlay
+                            ref={(element) => {
+                              if (element && item.stream) {
+                                element.srcObject =
+                                  item.stream;
+                              }
+                            }}
+                          />
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-24 h-24 rounded-full bg-indigo-600 flex items-center justify-center text-4xl">
+                          📞
+                        </div>
+                    
+                        <audio
+                          ref={remoteAudioRef}
+                          autoPlay
+                        />
+                      </>
+                    )}
                   </div>
                 )}
 

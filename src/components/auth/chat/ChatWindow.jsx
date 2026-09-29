@@ -9,7 +9,8 @@ import {
 } from "../../../services/messageService";
 
 import { usePreferences } from "../../../context/AppPreferences";
-
+import TranslationButton from "./TranslationButton";
+import PollCard from "../poll/pollCard";
 function ChatWindow({
   messages,
   currentUserId,
@@ -19,6 +20,8 @@ function ChatWindow({
   onToggleMessage,
   onDeleteSelected,
   onCancelSelection,
+  onForwardMessage,
+  isGroup = false,
 }) {
   const { t } = usePreferences();
 
@@ -26,6 +29,22 @@ function ChatWindow({
 
   const [openMenu, setOpenMenu] =
     useState(null);
+
+  useEffect(() => {
+    if (!openMenu) return;
+
+    const handleOutsideClick = (event) => {
+      if (!event.target.closest("[data-message-options-menu]")) {
+        setOpenMenu(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [openMenu]);
 
   const [localMessages, setLocalMessages] =
     useState(messages || []);
@@ -202,7 +221,7 @@ function ChatWindow({
                 </button>
               )}
 
-              <div className="relative max-w-[75%]">
+              <div className="relative max-w-[75%]" data-message-menu>
                 {/* Message bubble */}
                 <div
                   onClick={() => {
@@ -226,6 +245,14 @@ function ChatWindow({
                       : ""
                   }`}
                 >
+                  {isGroup && !mine && (
+                    <p className="mb-1 text-xs font-semibold text-indigo-600">
+                      {message.sender?.username ||
+                        message.sender?.name ||
+                        message.sender?.fullName ||
+                        "Unknown user"}
+                    </p>
+                  )}
                   <MessageContent
                     message={message}
                     mine={mine}
@@ -297,7 +324,10 @@ function ChatWindow({
 
                     {openMenu ===
                       message._id && (
-                      <div className="absolute right-0 top-10 z-30 min-w-[200px] rounded-xl border bg-white p-2 shadow-xl">
+                      <div
+                        data-message-options-menu
+                        className="absolute right-0 top-10 z-30 min-w-[200px] rounded-xl border bg-white p-2 shadow-xl"
+                      >
                         {/* Edit */}
                         {mine &&
                           message.messageType ===
@@ -421,6 +451,8 @@ function ChatWindow({
                           </button>
                         )}
 
+<button type="button" className="w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-gray-50" onClick={() => { setOpenMenu(null); onForwardMessage?.(message); }}>↗️ Forward</button>
+
                         {/* Bookmark */}
                         <div className="flex items-center justify-between rounded-lg px-2 py-2 hover:bg-gray-50">
                           <span className="text-sm">
@@ -484,14 +516,28 @@ function ChatWindow({
 
 function MessageContent({ message }) {
   const mediaUrl =
-    message.mediaUrl ||
-    message.image ||
-    message.video ||
-    message.audio;
+  message.mediaUrl ||
+  message.fileUrl ||
+  message.image ||
+  message.video ||
+  message.audio;
 
   const mediaType =
     message.mediaType ||
     message.messageType;
+
+  if (mediaType === "poll") {
+    return (
+      <PollCard
+        poll={
+          message.poll ||
+          message.pollData ||
+          message.pollId
+        }
+        currentUserId={getCurrentUserId()}
+      />
+    );
+  }
 
   /* Image */
   if (
@@ -562,13 +608,37 @@ function MessageContent({ message }) {
   }
 
   /* Text */
-  return (
-    <p className="whitespace-pre-wrap break-words">
-      {message.text ||
-        message.content ||
-        ""}
-    </p>
-  );
+      return (
+        <>
+          <p className="whitespace-pre-wrap break-words">
+            {message.text ||
+              message.content ||
+              ""}
+          </p>
+            
+          {(message.text || message.content)?.trim() && (
+            <TranslationButton
+              text={
+                message.text ||
+                message.content ||
+                ""
+              }
+              targetLanguage="te"
+            />
+          )}
+        </>
+      );
+}
+
+function getCurrentUserId() {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.id || payload._id || payload.userId;
+  } catch {
+    return null;
+  }
 }
 
 function getExpiryText(message) {

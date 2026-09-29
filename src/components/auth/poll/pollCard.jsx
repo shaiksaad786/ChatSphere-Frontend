@@ -9,15 +9,68 @@ function PollCard({
   poll: initialPoll,
   currentUserId,
 }) {
-  const [poll, setPoll] = useState(initialPoll);
+  const normalizePoll = (value) => {
+    if (!value) return null;
+    const options = value.options || [];
+    return {
+      ...value,
+      pollId: value.pollId || value._id,
+      votes: value.votes || options.map((option) => ({
+        optionId: option._id,
+        count: option.votes || 0,
+      })),
+      totalVotes:
+        value.totalVotes ??
+        options.reduce((sum, option) => sum + (option.votes || 0), 0),
+      userVote: value.userVote || null,
+    };
+  };
+
+  const [poll, setPoll] = useState(normalizePoll(initialPoll));
   const [selectedOption, setSelectedOption] =
     useState(initialPoll?.userVote || "");
   const [loading, setLoading] = useState(false);
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (
+      !initialPoll ||
+      typeof initialPoll !== "string"
+    ) {
+      return;
+    }
+
+    const loadPoll = async () => {
+      try {
+        const loadedPoll =
+          await getPoll(initialPoll);
+
+        if (loadedPoll) {
+          setPoll(
+            normalizePoll(loadedPoll)
+          );
+
+          setSelectedOption(
+            loadedPoll.userVote || ""
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load poll:",
+          error
+        );
+
+        setError(
+          "Failed to load poll."
+        );
+      }
+    };
+
+    loadPoll();
+  }, [initialPoll]);
 
   useEffect(() => {
-    setPoll(initialPoll);
+    setPoll(normalizePoll(initialPoll));
     setSelectedOption(initialPoll?.userVote || "");
   }, [initialPoll]);
 
@@ -29,7 +82,7 @@ function PollCard({
         const updated = await getPoll(poll.pollId);
 
         if (updated) {
-          setPoll(updated);
+          setPoll(normalizePoll(updated));
 
           if (updated.userVote) {
             setSelectedOption(updated.userVote);
@@ -59,9 +112,7 @@ function PollCard({
     poll?.isClosed || poll?.isExpired || expired
   );
 
-  const hasVoted = Boolean(
-    poll?.userVote || selectedOption
-  );
+  const hasVoted = Boolean(poll?.userVote);
 
   const creatorId = String(
     poll?.createdBy?._id ||
@@ -93,39 +144,39 @@ function PollCard({
     ) {
       return;
     }
-
+  
     setLoading(true);
     setError("");
-
+  
     try {
-      const updated = await votePoll(
+      await votePoll(
         poll.pollId,
         selectedOption
       );
-
-      setPoll(updated);
-      setSelectedOption(updated?.userVote || selectedOption);
+    
+      // Fetch the latest poll so vote count
+      // and percentages are updated immediately.
+      const refreshed = await getPoll(
+        poll.pollId
+      );
+    
+      if (refreshed) {
+        setPoll(normalizePoll(refreshed));
+      
+        setSelectedOption(
+          refreshed.userVote || selectedOption
+        );
+      }
     } catch (error) {
-      console.error("Poll vote failed:", error);
-
+      console.error(
+        "Poll vote failed:",
+        error
+      );
+    
       setError(
         error.response?.data?.message ||
           "Failed to submit vote."
       );
-
-      // Refresh in case another tab/user changed it.
-      try {
-        const refreshed = await getPoll(
-          poll.pollId
-        );
-
-        if (refreshed) {
-          setPoll(refreshed);
-          setSelectedOption(
-            refreshed.userVote || ""
-          );
-        }
-      } catch {}
     } finally {
       setLoading(false);
     }
@@ -149,7 +200,7 @@ function PollCard({
         poll.pollId
       );
 
-      setPoll(updated);
+      setPoll(normalizePoll(updated));
     } catch (error) {
       console.error("Poll close failed:", error);
 
@@ -167,15 +218,13 @@ function PollCard({
   const totalVotes = poll.totalVotes || 0;
 
   return (
-    <div className="bg-white border rounded-2xl p-4 shadow-sm max-w-md">
-      <div className="flex items-start justify-between gap-3">
+<div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm max-w-md text-gray-800">      <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-bold text-gray-800">
             🗳️ Poll
           </h3>
 
-          <p className="font-medium mt-2">
-            {poll.question}
+          <p className="font-medium mt-2 text-gray-800">            {poll.question}
           </p>
         </div>
 
@@ -219,12 +268,14 @@ function PollCard({
               }
               className={`w-full text-left border rounded-xl p-3 ${
                 selected
-                  ? "border-indigo-500 bg-indigo-50"
+                  ? "border-indigo-500 bg-indigo-50 text-gray-800"
                   : "border-gray-200 hover:bg-gray-50"
               } disabled:cursor-not-allowed`}
             >
               <div className="flex justify-between gap-3">
-                <span>{option.text}</span>
+                <span className="text-gray-800">
+                  {option.text}
+                </span>
 
                 <span className="text-xs text-gray-500">
                   {count} ({percentage}%)

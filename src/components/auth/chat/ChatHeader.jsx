@@ -5,6 +5,7 @@ function ChatHeader({
   conversation,
   online,
   lastSeen,
+  typing,
   onGroupManage,
   onSearchMessages,
   onSelectMessages,
@@ -72,13 +73,13 @@ function ChatHeader({
       other?.username ||
       t("unknownUser");
 
-  const status = conversation.isGroup
-    ? `${conversation.participants?.length || 0} ${t(
-        "members"
-      )}`
+  const status = typing
+    ? t("Typing")
     : online
     ? t("online")
-    : formatLastSeen(lastSeen, t);
+    : lastSeen
+    ? formatLastSeen(lastSeen)
+    : t("offline");
 
   const submitSearch = () => {
     const value = searchText.trim();
@@ -113,7 +114,7 @@ function ChatHeader({
           </h2>
 
           <p className="flex items-center gap-1 text-xs text-gray-500">
-            {!conversation.isGroup && (
+            {(
               <span
                 className={`h-2 w-2 rounded-full ${
                   online
@@ -156,7 +157,7 @@ function ChatHeader({
         </button>
 
         {/* Voice call */}
-        {!conversation.isGroup && (
+        {(
           <button
             type="button"
             onClick={onVoiceCall}
@@ -169,7 +170,7 @@ function ChatHeader({
         )}
         
                 {/* Video call */}
-        {!conversation.isGroup && (
+        {(
           <button
             type="button"
             onClick={onVideoCall}
